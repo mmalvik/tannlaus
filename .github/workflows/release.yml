@@ -1,0 +1,203 @@
+# Releases when the newest version heading in CHANGELOG.md has no published release yet.
+#
+# Needs a `release` Environment (deployment limited to main) with these secrets:
+#   DEVELOPER_ID_P12_BASE64    Developer ID Application certificate and key (.p12), base64
+#   DEVELOPER_ID_P12_PASSWORD  Password for the .p12
+#   ASC_API_KEY_ID             App Store Connect API key ID
+#   ASC_API_ISSUER_ID          App Store Connect issuer ID
+#   ASC_API_KEY_P8_BASE64      App Store Connect API private key (.p8), base64
+#   TAP_TOKEN                  Fine-grained token with contents: write on mmalvik/homebrew-tap only.
+#                              Expires after one year; renew it before then.
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Never run two releases at once, and never cancel one halfway.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Build, test and check version
+    runs-on: macos-26
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: make build
+      - run: make test
+      - name: Check version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(scripts/version.sh CHANGELOG.md) # Fails on a malformed heading.
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$version" == "0.0.0" ]]; then
+            echo "Nothing released in CHANGELOG.md yet; not a release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Only a missing release or a draft means release; any other gh failure stops the run.
+          if ! draft=$(gh release view "v$version" --json isDraft --jq .isDraft 2>&1); then
+            if [[ "$draft" != *"release not found"* ]]; then
+              echo "::error::Could not check whether v$version is released: $draft"
+              exit 1
+            fi
+            draft=missing
+          fi
+          if [[ "$draft" == "false" ]]; then
+            echo "v$version is already published; not a release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Releasing v$version."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    name: Sign, notarize and publish
+    needs: check
+    if: needs.check.outputs.release == 'true'
+    runs-on: macos-26
+    environment: release
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check secrets
+        env:
+          DEVELOPER_ID_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          missing=0
+          for name in DEVELOPER_ID_P12_BASE64 DEVELOPER_ID_P12_PASSWORD ASC_API_KEY_ID ASC_API_ISSUER_ID ASC_API_KEY_P8_BASE64 TAP_TOKEN; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing secret $name in the release environment."
+              missing=1
+            fi
+          done
+          exit $missing
+
+      - name: Import signing certificate
+        id: keychain
+        env:
+          DEVELOPER_ID_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password=$(openssl rand -base64 24)
+          echo "$DEVELOPER_ID_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/certificate.p12"
+          identity=$(security find-identity -v -p codesigning "$keychain" | grep -o '"Developer ID Application: [^"]*"' | head -n 1 | tr -d '"')
+          if [[ -z "$identity" ]]; then
+            echo "::error::No Developer ID Application identity in the certificate."
+            exit 1
+          fi
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+
+      - name: Write App Store Connect API key
+        env:
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+        run: echo "$ASC_API_KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+
+      - name: Build, sign, notarize and package
+        env:
+          CODESIGN_IDENTITY: ${{ steps.keychain.outputs.identity }}
+          ASC_API_KEY_PATH: ${{ runner.temp }}/AuthKey.p8
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: |
+          make app CODESIGN_IDENTITY="$CODESIGN_IDENTITY"
+          make notarize-app
+          make verify-app
+          make zip
+          make dmg CODESIGN_IDENTITY="$CODESIGN_IDENTITY"
+          make notarize-dmg
+          make verify-dmg
+          make checksums
+          make release-notes > "$RUNNER_TEMP/notes.md"
+
+      # The release stays a draft (no tag yet) until all assets are uploaded, so a failed run can be rerun.
+      # A draft left by a failed run is replaced; a published release is never touched.
+      - name: Create draft release
+        run: |
+          if draft=$(gh release view "v$VERSION" --json isDraft --jq .isDraft 2>&1); then
+            if [[ "$draft" != "true" ]]; then
+              echo "::error::v$VERSION is already published."
+              exit 1
+            fi
+            gh release delete "v$VERSION" --yes
+          elif [[ "$draft" != *"release not found"* ]]; then
+            echo "::error::Could not check release v$VERSION: $draft"
+            exit 1
+          fi
+          gh release create "v$VERSION" --draft --target "$GITHUB_SHA" \
+            --title "Tannlaus $VERSION" --notes-file "$RUNNER_TEMP/notes.md" \
+            "build/Tannlaus-$VERSION.zip" "build/Tannlaus-$VERSION.dmg" "build/Tannlaus-$VERSION.sha256"
+
+      - name: Publish release
+        run: gh release edit "v$VERSION" --draft=false --latest
+
+      - name: Clean up signing material
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/certificate.p12"
+
+  # Runs only once the release is published, because Homebrew can't download a draft's assets.
+  # If it fails, use "Re-run failed jobs": a new run sees the release as published and skips it.
+  cask:
+    name: Update Homebrew cask
+    needs: [check, release]
+    runs-on: macos-26
+    environment: release
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update Homebrew cask
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          # Hash the published zip, so the cask matches what users download.
+          gh release download "v$VERSION" --pattern "Tannlaus-$VERSION.zip" --dir "$RUNNER_TEMP"
+          sha256=$(shasum -a 256 "$RUNNER_TEMP/Tannlaus-$VERSION.zip" | cut -d ' ' -f 1)
+          git clone --depth 1 "https://x-access-token:$TAP_TOKEN@github.com/mmalvik/homebrew-tap.git" "$RUNNER_TEMP/tap"
+          scripts/update-cask.sh "$RUNNER_TEMP/tap/Casks/tannlaus.rb" "$VERSION" "$sha256"
+          cd "$RUNNER_TEMP/tap"
+          if git diff --quiet; then
+            echo "Cask already at $VERSION."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "tannlaus $VERSION"
+          git push
