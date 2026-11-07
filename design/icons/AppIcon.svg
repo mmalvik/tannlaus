@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <!-- Body: deep blue that brightens towards the top-left corner -->
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1B58C8"/>
+      <stop offset=".45" stop-color="#0E3A97"/>
+      <stop offset=".78" stop-color="#0B2C74"/>
+      <stop offset="1" stop-color="#0A2460"/>
+    </linearGradient>
+    <radialGradient id="light" gradientUnits="userSpaceOnUse" cx="130" cy="110" r="620">
+      <stop offset="0" stop-color="#4DA8FF" stop-opacity=".95"/>
+      <stop offset=".35" stop-color="#2F7FEA" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#2F7FEA" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" gradientUnits="userSpaceOnUse" cx="512" cy="430" r="620">
+      <stop offset=".6" stop-color="#020A24" stop-opacity="0"/>
+      <stop offset="1" stop-color="#020A24" stop-opacity=".25"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#BFE0FF" stop-opacity=".45"/>
+      <stop offset=".2" stop-color="#BFE0FF" stop-opacity=".1"/>
+      <stop offset=".8" stop-color="#BFE0FF" stop-opacity=".08"/>
+      <stop offset="1" stop-color="#BFE0FF" stop-opacity=".22"/>
+    </linearGradient>
+
+    <!-- Tooth enamel -->
+    <linearGradient id="enamel" gradientUnits="userSpaceOnUse" x1="260" y1="360" x2="600" y2="780">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset=".45" stop-color="#F1F6FF"/>
+      <stop offset="1" stop-color="#C9D8F4"/>
+    </linearGradient>
+    <path id="tooth" d="M 428 392
+      C 400 370 368 352 330 350
+      C 270 348 226 392 228 462
+      C 230 515 250 550 258 600
+      C 266 655 270 715 290 752
+      C 304 778 326 788 350 786
+      C 378 784 388 756 394 722
+      C 402 682 410 650 428 648
+      C 446 650 454 682 462 722
+      C 468 756 478 784 506 786
+      C 530 788 552 778 566 752
+      C 586 715 590 655 598 600
+      C 606 550 626 515 628 462
+      C 630 392 586 348 526 350
+      C 488 352 456 370 428 392 Z"/>
+    <clipPath id="toothClip"><use href="#tooth"/></clipPath>
+
+    <!-- Bluetooth rune: one continuous stroke -->
+    <path id="rune" d="M 658 274 L 814 413 L 736 482 L 736 205 L 814 274 L 658 413"
+          fill="none" stroke-width="19" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="16"/></filter>
+    <filter id="blur6" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6"/></filter>
+    <filter id="blur10" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="10"/></filter>
+    <filter id="blur24" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="24"/></filter>
+    <filter id="blur40" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="40"/></filter>
+    <filter id="star" x="-300%" y="-300%" width="700%" height="700%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+
+  <!-- Soft drop shadow, kept inside the 100 px margin -->
+  <rect x="104" y="116" width="816" height="816" rx="185" fill="#000B2A" opacity=".38" filter="url(#shadow)"/>
+
+  <!-- Body -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#light)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#vignette)"/>
+  <rect x="102" y="102" width="820" height="820" rx="183" fill="none" stroke="url(#rim)" stroke-width="4"/>
+
+  <!-- Stars -->
+  <g fill="#D4E9FF" filter="url(#star)">
+    <circle cx="413" cy="166" r="3.5" opacity=".8"/>
+    <circle cx="327" cy="244" r="4.5" opacity=".9"/>
+    <circle cx="240" cy="284" r="4" opacity=".75"/>
+    <circle cx="806" cy="548" r="4" opacity=".7"/>
+    <circle cx="738" cy="632" r="4" opacity=".75"/>
+  </g>
+
+  <!-- Tooth: halo, then shaded enamel -->
+  <use href="#tooth" fill="#9CC4FF" opacity=".45" filter="url(#blur24)"/>
+  <g clip-path="url(#toothClip)">
+    <use href="#tooth" fill="url(#enamel)"/>
+    <!-- Soft rim shading all round, strongest at the right and bottom -->
+    <use href="#tooth" fill="none" stroke="#8EA7DA" stroke-width="46" opacity=".45" filter="url(#blur24)"/>
+    <ellipse cx="640" cy="560" rx="80" ry="260" fill="#6F8ED0" opacity=".45" filter="url(#blur40)"/>
+    <ellipse cx="430" cy="800" rx="230" ry="80" fill="#7290D0" opacity=".35" filter="url(#blur40)"/>
+    <!-- Highlights on the left lobe and left side -->
+    <ellipse cx="320" cy="440" rx="62" ry="95" fill="#FFFFFF" opacity=".95" filter="url(#blur24)"/>
+    <ellipse cx="520" cy="410" rx="55" ry="45" fill="#FFFFFF" opacity=".7" filter="url(#blur24)"/>
+  </g>
+
+  <!-- Bluetooth mark with a soft, cool "resting" glow: switched down, not active -->
+  <use href="#rune" stroke="#2F5FB4" stroke-width="40" opacity=".45" filter="url(#blur24)"/>
+  <use href="#rune" stroke="#8CB0E6" opacity=".4" filter="url(#blur10)"/>
+  <use href="#rune" stroke="#D3E2F6"/>
+</svg>

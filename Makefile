@@ -38,7 +38,7 @@ app: build
 	cp "$$(swift build $(SWIFT_FLAGS) --show-bin-path)/$(APP_NAME)" $(APP)/Contents/MacOS/
 	sed -e 's/__VERSION__/$(VERSION)/' -e 's/__BUILD__/$(BUILD_NUMBER)/' Resources/Info.plist > $(APP)/Contents/Info.plist
 	plutil -lint -s $(APP)/Contents/Info.plist
-	cp Resources/AppIcon.icns $(APP)/Contents/Resources/
+	cp Resources/AppIcon.icns Resources/MenuBarIcon*.png $(APP)/Contents/Resources/
 	codesign --force --sign "$(CODESIGN_IDENTITY)" $(TIMESTAMP) --options runtime --entitlements $(ENTITLEMENTS) $(APP)
 	codesign --verify --strict --verbose=1 $(APP)
 	@echo "Built $(APP) $(VERSION) ($(BUILD_NUMBER))"

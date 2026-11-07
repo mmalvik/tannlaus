@@ -44,10 +44,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     private func updateIcon() {
         guard let button = statusItem?.button else { return }
-        let (symbol, description) = isAuthorized
-            ? ("moon.zzz", "Tannlaus")
-            : ("exclamationmark.triangle", "Tannlaus: Bluetooth access needed")
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: description)
+        let (name, description) = isAuthorized
+            ? ("MenuBarIcon", "Tannlaus")
+            : ("MenuBarIcon-denied", "Tannlaus: Bluetooth access needed")
+        // Copied so the settings below don't change the shared image NSImage(named:) caches.
+        let image = NSImage(named: name)?.copy() as? NSImage
+        image?.accessibilityDescription = description
         image?.isTemplate = true
         button.image = image
         button.toolTip = description
