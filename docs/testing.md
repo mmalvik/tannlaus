@@ -25,7 +25,7 @@ log stream --predicate 'subsystem == "com.tannlaus.app"' --level info
 
 ## Install (release builds)
 
-7. `brew tap mmalvik/tap && brew install --cask tannlaus` on a clean Mac: the app opens with no Gatekeeper warning.
+7. `brew install --cask mmalvik/tap/tannlaus` on a clean Mac: the app opens with no Gatekeeper warning.
 8. `brew upgrade` to a newer release: Bluetooth permission and Launch at login are still in place.
 9. `brew uninstall --zap --cask tannlaus`: the app quits and is removed, and its container and preferences are gone.
 

@@ -13,9 +13,10 @@ Requires macOS 14 (Sonoma) or later on Apple Silicon.
 With [Homebrew](https://brew.sh):
 
 ```
-brew tap mmalvik/tap
-brew install --cask tannlaus
+brew install --cask mmalvik/tap/tannlaus
 ```
+
+Using the full name adds the tap and tells Homebrew to trust the cask, which Homebrew requires for apps outside its official collection.
 
 Or download `Tannlaus-X.Y.Z.dmg` from the [latest release](https://github.com/mmalvik/tannlaus/releases/latest), open it and drag Tannlaus to Applications.
 
