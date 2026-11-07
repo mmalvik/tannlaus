@@ -21,7 +21,8 @@ public enum BluetoothControllerError: Error, Equatable {
 }
 
 /// Access to the Bluetooth controller. The app provides the real implementation; tests use a fake.
-public protocol BluetoothController: AnyObject {
+/// Wake restores call it from a background thread, so it must be safe to use from any thread.
+public protocol BluetoothController: AnyObject, Sendable {
     /// The current authorization. Must not block or show any UI.
     var authorization: BluetoothAuthorization { get }
 

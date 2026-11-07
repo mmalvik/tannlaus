@@ -4,7 +4,7 @@ import TannlausCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let logger = Logger(subsystem: "com.tannlaus.app", category: "app")
+    private let logger = Logger(category: "app")
     private let monitor = BluetoothMonitor()
     private var coordinator: PowerCoordinator?
     private var statusMenu: StatusMenu?
@@ -14,8 +14,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         logger.info("Tannlaus \(version, privacy: .public) launched")
 
         // Launching never changes Bluetooth.
-        coordinator = PowerCoordinator(controller: SystemBluetoothController(), scheduler: TaskScheduler())
-        let statusMenu = StatusMenu(settings: Settings(), loginItem: LoginItem(), monitor: monitor)
+        let controller = SystemBluetoothController()
+        coordinator = PowerCoordinator(controller: controller, scheduler: TaskScheduler())
+        let statusMenu = StatusMenu(
+            settings: Settings(),
+            loginItem: LoginItem(),
+            monitor: monitor,
+            canControlBluetooth: controller.isAvailable
+        )
         self.statusMenu = statusMenu
         monitor.onChange = { [weak statusMenu] in statusMenu?.update() }
         monitor.start()

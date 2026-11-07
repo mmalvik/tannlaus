@@ -29,7 +29,7 @@ final class SystemBluetoothController: BluetoothController {
     private let inFlight = OSAllocatedUnfairLock(initialState: false)
     private let callTimeout: DispatchTimeInterval
     private let settleTimeout: TimeInterval
-    private let logger = Logger(subsystem: "com.tannlaus.app", category: "bluetooth")
+    private let logger = Logger(category: "bluetooth")
 
     init(callTimeout: DispatchTimeInterval = .seconds(3), settleTimeout: TimeInterval = 2) {
         self.callTimeout = callTimeout
@@ -38,6 +38,11 @@ final class SystemBluetoothController: BluetoothController {
         if functions == nil {
             logger.fault("IOBluetooth power functions not found; Tannlaus cannot control Bluetooth on this macOS version")
         }
+    }
+
+    /// Whether the private functions were found. If not, every call fails with `.unavailable`.
+    var isAvailable: Bool {
+        functions != nil
     }
 
     var authorization: BluetoothAuthorization {

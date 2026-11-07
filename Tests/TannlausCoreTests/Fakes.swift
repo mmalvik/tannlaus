@@ -1,6 +1,7 @@
 import TannlausCore
 
-final class FakeBluetoothController: BluetoothController {
+/// Used from one thread at a time: the fake scheduler runs "background" work inline.
+final class FakeBluetoothController: BluetoothController, @unchecked Sendable {
     enum Call: Equatable {
         case read
         case set(BluetoothPower)
@@ -40,7 +41,8 @@ final class FakeBluetoothController: BluetoothController {
     }
 }
 
-/// Collects scheduled work so tests can run it by hand, without waiting.
+/// Collects scheduled work so tests can run it by hand, without waiting. Background work runs
+/// inline unless `runsBackgroundInline` is false; then it waits for `finishBackgroundWork()`.
 @MainActor
 final class FakeScheduler: Scheduler {
     final class Item: Cancellable {
@@ -59,11 +61,52 @@ final class FakeScheduler: Scheduler {
     }
 
     private(set) var items: [Item] = []
+    private(set) var pauses: [Duration] = []
+    /// Called on every pause, to change state between attempts in the sleep handler.
+    var onPause: (() -> Void)?
+    var runsBackgroundInline = true
+    private var backgroundWork: [() -> @MainActor () -> Void] = []
+    private var undelivered: [@MainActor () -> Void] = []
 
     func schedule(after delay: Duration, _ work: @escaping @MainActor () -> Void) -> Cancellable {
         let item = Item(delay: delay, work: work)
         items.append(item)
         return item
+    }
+
+    func runInBackground<T: Sendable>(
+        _ work: @escaping @Sendable () -> T,
+        then completion: @escaping @MainActor @Sendable (T) -> Void
+    ) {
+        let job: () -> @MainActor () -> Void = {
+            let value = work()
+            return { completion(value) }
+        }
+        if runsBackgroundInline {
+            job()()
+        } else {
+            backgroundWork.append(job)
+        }
+    }
+
+    func waitForBackgroundWork() {
+        let jobs = backgroundWork
+        backgroundWork = []
+        undelivered += jobs.map { $0() }
+    }
+
+    /// Runs queued background work and delivers its results.
+    func finishBackgroundWork() {
+        waitForBackgroundWork()
+        while !undelivered.isEmpty {
+            undelivered.removeFirst()()
+            waitForBackgroundWork()
+        }
+    }
+
+    func pause(for delay: Duration) {
+        pauses.append(delay)
+        onPause?()
     }
 
     var pending: [Item] {

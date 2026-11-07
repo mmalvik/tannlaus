@@ -8,22 +8,29 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let settings: Settings
     private let loginItem: LoginItem
     private let monitor: BluetoothMonitor
+    /// False if this macOS version lacks the functions Tannlaus uses to switch Bluetooth.
+    private let canControlBluetooth: Bool
     private var statusItem: NSStatusItem?
 
-    init(settings: Settings, loginItem: LoginItem, monitor: BluetoothMonitor) {
+    init(settings: Settings, loginItem: LoginItem, monitor: BluetoothMonitor, canControlBluetooth: Bool) {
         self.settings = settings
         self.loginItem = loginItem
         self.monitor = monitor
+        self.canControlBluetooth = canControlBluetooth
     }
 
     private var isAuthorized: Bool {
         BluetoothAuthorization.current == .allowed
     }
 
-    /// Creates or removes the status item. Without Bluetooth access the icon is shown even
-    /// when hidden, so the user can see that Tannlaus isn't working.
+    private var isWorking: Bool {
+        canControlBluetooth && isAuthorized
+    }
+
+    /// Creates or removes the status item. When Tannlaus can't work (no Bluetooth access, or an
+    /// unsupported macOS) the icon is shown even when hidden, so the user can see it.
     func update() {
-        let visible = !settings.hideIcon || !isAuthorized
+        let visible = !settings.hideIcon || !isWorking
         if visible, statusItem == nil {
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
             let menu = NSMenu()
@@ -44,9 +51,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     private func updateIcon() {
         guard let button = statusItem?.button else { return }
-        let (name, description) = isAuthorized
-            ? ("MenuBarIcon", "Tannlaus")
-            : ("MenuBarIcon-denied", "Tannlaus: Bluetooth access needed")
+        let (name, description) = if !canControlBluetooth {
+            ("MenuBarIcon-denied", "Tannlaus: not supported on this macOS version")
+        } else if !isAuthorized {
+            ("MenuBarIcon-denied", "Tannlaus: Bluetooth access needed")
+        } else {
+            ("MenuBarIcon", "Tannlaus")
+        }
         // Copied so the settings below don't change the shared image NSImage(named:) caches.
         let image = NSImage(named: name)?.copy() as? NSImage
         image?.accessibilityDescription = description
@@ -91,7 +102,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     private var statusText: String {
-        switch BluetoothAuthorization.current {
+        guard canControlBluetooth else {
+            return "Not working: unsupported macOS version"
+        }
+        return switch BluetoothAuthorization.current {
         case .allowed:
             switch monitor.isPoweredOn {
             case true?: "Active: Bluetooth is on"
@@ -130,9 +144,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         if settings.hideIcon {
             NSApp.activate()
             let alert = NSAlert()
-            if isAuthorized {
+            if isWorking {
                 alert.messageText = "Menu bar icon hidden"
                 alert.informativeText = "Tannlaus keeps running. To show the icon again, open Tannlaus again from your Applications folder."
+            } else if !canControlBluetooth {
+                alert.messageText = "Menu bar icon stays visible"
+                alert.informativeText = "Tannlaus can't switch Bluetooth on this macOS version, so the icon stays to show that it isn't working."
             } else {
                 // update() keeps the icon visible without access, so don't claim it is hidden.
                 alert.messageText = "Menu bar icon stays visible for now"

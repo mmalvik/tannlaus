@@ -112,9 +112,34 @@ struct PowerCoordinatorTests {
             scheduler.runNext()
         }
 
-        #expect(delays == RetryPolicy.standard.delays)
-        #expect(controller.sets == [.off] + Array(repeating: .on, count: 1 + RetryPolicy.standard.delays.count))
+        #expect(delays == RetryPolicy.wake.delays)
+        #expect(controller.sets == [.off] + Array(repeating: .on, count: 1 + RetryPolicy.wake.delays.count))
         #expect(controller.power == .off)
+    }
+
+    @Test func failedSleepChangeIsRetriedBeforeReturning() {
+        let controller = FakeBluetoothController(power: .on)
+        let coordinator = makeCoordinator(controller)
+        controller.ignoredSets = 1
+
+        coordinator.handleWillSleep()
+
+        #expect(controller.power == .off)
+        #expect(controller.sets == [.off, .off])
+        #expect(scheduler.pauses == [RetryPolicy.sleep.delays[0]])
+        #expect(scheduler.items.isEmpty)
+    }
+
+    @Test func sleepGivesUpAfterAllRetriesWithBackoff() {
+        let controller = FakeBluetoothController(power: .on)
+        let coordinator = makeCoordinator(controller)
+        controller.ignoredSets = 100
+
+        coordinator.handleWillSleep()
+
+        #expect(scheduler.pauses == RetryPolicy.sleep.delays)
+        #expect(controller.sets == Array(repeating: .off, count: 1 + RetryPolicy.sleep.delays.count))
+        #expect(scheduler.items.isEmpty)
     }
 
     @Test(arguments: [BluetoothControllerError.timedOut, .busy, .unavailable])
@@ -132,19 +157,59 @@ struct PowerCoordinatorTests {
         #expect(controller.power == .on)
     }
 
-    @Test func wakeCancelsPendingSleepRetry() {
+    // MARK: Background restore
+
+    @Test func wakeRestoreRunsInBackground() {
         let controller = FakeBluetoothController(power: .on)
         let coordinator = makeCoordinator(controller)
-        controller.ignoredSets = 1
-
+        scheduler.runsBackgroundInline = false
         coordinator.handleWillSleep()
-        #expect(scheduler.pending.count == 1)
 
         coordinator.handleDidWake()
-        scheduler.runAll()
+        #expect(controller.sets == [.off])
 
+        scheduler.finishBackgroundWork()
         #expect(controller.power == .on)
         #expect(controller.sets == [.off, .on])
+    }
+
+    @Test func sleepWaitsForRestoreStillRunning() {
+        let controller = FakeBluetoothController(power: .on)
+        let coordinator = makeCoordinator(controller)
+        scheduler.runsBackgroundInline = false
+        coordinator.handleWillSleep()
+        coordinator.handleDidWake()
+
+        coordinator.handleWillSleep()
+
+        // The restore call finished before the sleep handler turned Bluetooth off.
+        #expect(controller.sets == [.off, .on, .off])
+        #expect(controller.power == .off)
+
+        scheduler.finishBackgroundWork()
+        #expect(scheduler.pending.isEmpty)
+        #expect(controller.power == .off)
+
+        coordinator.handleDidWake()
+        scheduler.finishBackgroundWork()
+        #expect(controller.power == .on)
+    }
+
+    @Test func secondWakeIgnoresInterruptedRestoreResult() {
+        let controller = FakeBluetoothController(power: .on)
+        let coordinator = makeCoordinator(controller)
+        scheduler.runsBackgroundInline = false
+        coordinator.handleWillSleep()
+        controller.ignoredSets = 1
+        coordinator.handleDidWake()
+
+        coordinator.handleDidWake()
+        scheduler.finishBackgroundWork()
+
+        // The first attempt failed, but its result is ignored: no retry on top of the restarted restore.
+        #expect(controller.power == .on)
+        #expect(controller.sets == [.off, .on, .on])
+        #expect(scheduler.pending.isEmpty)
     }
 
     @Test func sleepDuringPendingRestoreRecordsBluetoothAsOn() {
@@ -204,17 +269,15 @@ struct PowerCoordinatorTests {
         let controller = FakeBluetoothController(power: .on)
         let coordinator = makeCoordinator(controller)
         controller.ignoredSets = 1
+        scheduler.onPause = { controller.authorization = .denied }
+
         coordinator.handleWillSleep()
-        #expect(scheduler.pending.count == 1)
 
-        controller.authorization = .denied
-        scheduler.runAll()
-
+        #expect(scheduler.pauses.count == 1)
         #expect(controller.sets == [.off])
-        #expect(scheduler.pending.isEmpty)
     }
 
-    @Test func restoreRetryWithoutAccessWaitsForNextWake() {
+    @Test func restoreRetryWithoutAccessIsDropped() {
         let controller = FakeBluetoothController(power: .on)
         let coordinator = makeCoordinator(controller)
         coordinator.handleWillSleep()
@@ -224,13 +287,31 @@ struct PowerCoordinatorTests {
         controller.authorization = .denied
         scheduler.runAll()
         #expect(controller.sets == [.off, .on])
+        #expect(scheduler.pending.isEmpty)
 
+        // Access comes back while awake and Bluetooth is still off: the user's current
+        // state is what the next sleep records, so the next wake leaves it off.
         controller.authorization = .allowed
         coordinator.handleWillSleep()
         coordinator.handleDidWake()
 
+        #expect(controller.power == .off)
+        #expect(controller.sets == [.off, .on])
+    }
+
+    @Test func secondWakeDuringPendingRestoreRestartsIt() {
+        let controller = FakeBluetoothController(power: .on)
+        let coordinator = makeCoordinator(controller)
+        coordinator.handleWillSleep()
+        controller.ignoredSets = 1
+        coordinator.handleDidWake()
+        #expect(scheduler.pending.count == 1)
+
+        coordinator.handleDidWake()
+
         #expect(controller.power == .on)
-        #expect(controller.sets == [.off, .on, .off, .on])
+        #expect(controller.sets == [.off, .on, .on])
+        #expect(scheduler.pending.isEmpty)
     }
 
     @Test func sleepWithoutAccessKeepsPendingRestore() {

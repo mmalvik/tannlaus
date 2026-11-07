@@ -34,7 +34,9 @@ expect_failure "version: malformed version" scripts/version.sh $fixtures/malform
 expect_failure "version: malformed separator" scripts/version.sh $fixtures/malformed-separator.md
 expect_failure "version: invalid date" scripts/version.sh $fixtures/invalid-date.md
 expect_failure "version: missing changelog" scripts/version.sh $fixtures/missing.md
-expect "version: repository changelog" "$(scripts/version.sh CHANGELOG.md)" scripts/version.sh CHANGELOG.md
+# Compared with the first released heading, found here independently of version.sh.
+newest_heading=$(grep -m 1 -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md | tr -d '#[] ' || true)
+expect "version: repository changelog" "${newest_heading:-0.0.0}" scripts/version.sh CHANGELOG.md
 
 expect "section: middle" "$(printf '### Fixed\n\n- Bluetooth comes back after wake.')" \
   scripts/changelog-section.sh 1.2.3 $fixtures/released.md

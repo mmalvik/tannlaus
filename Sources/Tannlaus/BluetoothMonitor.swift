@@ -1,5 +1,6 @@
 import CoreBluetooth
 import os
+import TannlausCore
 
 /// Asks for Bluetooth permission at launch and reports authorization and power changes,
 /// using only public CoreBluetooth API so the menu never has to call the private functions.
@@ -11,7 +12,7 @@ final class BluetoothMonitor: NSObject, CBCentralManagerDelegate {
     private(set) var isPoweredOn: Bool?
 
     private var central: CBCentralManager?
-    private let logger = Logger(subsystem: "com.tannlaus.app", category: "permission")
+    private let logger = Logger(category: "permission")
 
     /// Creating the manager shows the permission prompt if the user hasn't answered yet.
     /// It is kept for the app's lifetime to receive authorization changes.

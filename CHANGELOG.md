@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-07
+### Added
+
+- The menu shows "Not working: unsupported macOS version", and the icon stays visible, if a macOS update stops Tannlaus from switching Bluetooth.
+
+### Fixed
+
+- Bluetooth you turned off yourself no longer comes back on at the next wake after Bluetooth access was briefly revoked.
+- Bluetooth is now restored if the Mac reports waking twice while it is still turning Bluetooth back on.
+- If turning Bluetooth off at sleep doesn't work the first time, Tannlaus now retries before the Mac sleeps instead of leaving Bluetooth on.
+- The menu bar icon no longer stops responding for several seconds after wake while Bluetooth is turned back on.
+
 ## [0.2.0] - 2026-11-07
 
 ### Changed
