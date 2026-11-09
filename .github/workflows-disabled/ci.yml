@@ -16,7 +16,7 @@ jobs:
     name: Build and test
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # The build number is the commit count.
       - name: Toolchain
