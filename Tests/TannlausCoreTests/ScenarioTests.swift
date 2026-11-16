@@ -13,7 +13,7 @@ struct ScenarioTests {
         /// The lid message from the root power domain.
         case lid(closed: Bool)
         /// The power source notification after the source changed.
-        case power(PowerSource)
+        case power(String)
         /// The display list changed to these displays.
         case displays([DisplayInfo])
         /// A display event with the list unchanged (the "flags 0x0" events at wake).
@@ -36,7 +36,7 @@ struct ScenarioTests {
     @discardableResult
     func replay(
         displays: [DisplayInfo],
-        power: PowerSource,
+        power: String,
         keepOnWhenDocked: Bool = true,
         _ steps: [(Double, Step)],
         sourceLocation: SourceLocation = #_sourceLocation
@@ -84,7 +84,7 @@ struct ScenarioTests {
     // MARK: Not docked: as 1.0
 
     @Test func t1LidClosedOnBattery() {
-        replay(displays: [.builtIn], power: .battery, [
+        replay(displays: [.builtIn], power: Power.battery, [
             (0.000, .lid(closed: true)),
             (0.007, .systemWillSleep),
             (0.014, .willSleep),
@@ -101,9 +101,9 @@ struct ScenarioTests {
     }
 
     @Test func t2LidClosedOnChargerWithDarkWake() {
-        replay(displays: [.builtIn], power: .battery, [
+        replay(displays: [.builtIn], power: Power.battery, [
             (0.000, .lid(closed: false)),
-            (0.084, .power(.ac)),
+            (0.084, .power(Power.ac)),
             (5.066, .lid(closed: true)),
             (5.070, .systemWillSleep),
             (5.074, .willSleep),
@@ -124,17 +124,17 @@ struct ScenarioTests {
         // Docked earlier, then the monitor unplugged with the lid open, then asleep on battery.
         // Plugging in a charger causes a notification wake with system power messages but no
         // NSWorkspace "did wake": Bluetooth stays off until the lid is opened.
-        replay(displays: [.dell, .builtIn], power: .ac, [
+        replay(displays: [.dell, .builtIn], power: Power.ac, [
             (0.000, .displays([.builtIn])),
             (0.804, .lid(closed: false)),
-            (0.811, .power(.battery)),
+            (0.811, .power(Power.battery)),
             (59.424, .lid(closed: true)),
             (59.432, .systemWillSleep),
             (59.438, .willSleep),
             (59.439, .expect(.off)),
             (127.750, .lid(closed: true)),
             (128.218, .lid(closed: true)),
-            (128.245, .power(.ac)),
+            (128.245, .power(Power.ac)),
             (128.306, .systemWillPowerOn),
             (128.359, .displaysTouched),
             (128.373, .systemHasPoweredOn),
@@ -143,7 +143,7 @@ struct ScenarioTests {
             (142.088, .lid(closed: true)),
             (166.361, .lid(closed: true)),
             (167.650, .lid(closed: true)),
-            (167.656, .power(.battery)),
+            (167.656, .power(Power.battery)),
             (167.657, .expect(.off)),
             (201.385, .lid(closed: false)),
             (201.430, .systemWillPowerOn),
@@ -177,19 +177,19 @@ struct ScenarioTests {
     ]
 
     @Test func t3MenuSleepWithLidOpenKeepsBluetoothOn() {
-        let (coordinator, _) = replay(displays: [.builtIn], power: .ac, Self.t3Steps)
+        let (coordinator, _) = replay(displays: [.builtIn], power: Power.ac, Self.t3Steps)
         #expect(!controller.sets.contains(.off))
         #expect(controller.power == .on)
         #expect(coordinator.dockSnapshot.isDocked) // The wake flicker settled back to docked.
     }
 
     @Test func t3WithSettingOffTurnsBluetoothOff() {
-        replay(displays: [.builtIn], power: .ac, keepOnWhenDocked: false, Self.t3Steps)
+        replay(displays: [.builtIn], power: Power.ac, keepOnWhenDocked: false, Self.t3Steps)
         #expect(controller.sets == [.off, .on])
     }
 
     @Test func t4ClamshellKeepsBluetoothOnThroughPlaceholderAtWake() {
-        replay(displays: [.dell, .builtIn], power: .ac, [
+        replay(displays: [.dell, .builtIn], power: Power.ac, [
             (0.000, .lid(closed: true)),
             (0.086, .displays([.dell])),
             (20.655, .systemWillSleep),
@@ -212,9 +212,9 @@ struct ScenarioTests {
     @Test func t5LidClosedOnBatteryWithMonitorKeepsBluetoothOn() {
         // This Mac sleeps when the lid closes on battery even with a monitor. The monitor is
         // still connected, so it counts as docked.
-        replay(displays: [.dell, .builtIn], power: .ac, [
+        replay(displays: [.dell, .builtIn], power: Power.ac, [
             (0.000, .lid(closed: false)),
-            (0.008, .power(.battery)),
+            (0.008, .power(Power.battery)),
             (9.513, .lid(closed: true)),
             (9.522, .systemWillSleep),
             (9.530, .willSleep),
@@ -231,15 +231,15 @@ struct ScenarioTests {
     }
 
     @Test func t6UndockBeforeWillSleepThenT7RedockWhileAsleep() {
-        replay(displays: [.dell, .builtIn], power: .battery, [
+        replay(displays: [.dell, .builtIn], power: Power.battery, [
             (0.000, .lid(closed: false)),
-            (0.019, .power(.ac)),
+            (0.019, .power(Power.ac)),
             (6.416, .lid(closed: true)),
             (6.498, .displays([.dell])), // Clamshell.
             // T6: unplugging the charger and the monitor. Both arrive 0.2 s before will-sleep,
             // and macOS lists its placeholder instead of the monitor.
             (32.201, .lid(closed: true)),
-            (32.202, .power(.battery)),
+            (32.202, .power(Power.battery)),
             (32.222, .displays([.placeholder])),
             (32.433, .systemWillSleep),
             (32.435, .willSleep),
@@ -251,7 +251,7 @@ struct ScenarioTests {
             // Bluetooth stays off (known limit with separate cables).
             (163.260, .lid(closed: true)),
             (163.667, .lid(closed: true)),
-            (163.692, .power(.ac)),
+            (163.692, .power(Power.ac)),
             (163.730, .systemWillPowerOn),
             (163.817, .systemHasPoweredOn),
             (165.335, .systemWillSleep),
@@ -270,9 +270,9 @@ struct ScenarioTests {
     @Test func t10UndockWhileAsleepWithoutDisplayEvent() {
         // T10's unplug on its own, without T9 first: the monitor is still listed at sleep, and
         // the dark wake reports only lid and power source changes. Timings from T9+T10.
-        replay(displays: [.builtIn], power: .battery, [
+        replay(displays: [.builtIn], power: Power.battery, [
             (0.000, .lid(closed: false)),
-            (0.027, .power(.ac)),
+            (0.027, .power(Power.ac)),
             (4.548, .displays([.dell, .builtIn])),
             (6.030, .displays([.builtIn])),
             (6.935, .displays([.dell, .builtIn])),
@@ -285,7 +285,7 @@ struct ScenarioTests {
             (121.210, .expect(.on)), // Waiting out the wake grace.
             (122.300, .expect(.off)),
             (124.804, .lid(closed: true)),
-            (124.810, .power(.battery)),
+            (124.810, .power(Power.battery)),
             (124.811, .expect(.off)),
             (192.037, .lid(closed: false)),
             (192.079, .systemWillPowerOn),
@@ -300,7 +300,7 @@ struct ScenarioTests {
     @Test func undockNoticedOnlyAtFullWakeDoesNotFlapBluetooth() {
         // Monitor unplugged while asleep with no dark wake to notice it; the lid is opened later.
         // Wake events with T3's timings: Bluetooth stays on, never off then on again.
-        replay(displays: [.dell, .builtIn], power: .ac, [
+        replay(displays: [.dell, .builtIn], power: Power.ac, [
             (0.000, .systemWillSleep),
             (0.009, .willSleep),
             (0.010, .expect(.on)),
@@ -316,9 +316,9 @@ struct ScenarioTests {
     }
 
     @Test func t9LidClosedOnSleepingDockedMacThenT10Undock() {
-        let (coordinator, _) = replay(displays: [.builtIn], power: .battery, [
+        let (coordinator, _) = replay(displays: [.builtIn], power: Power.battery, [
             (0.000, .lid(closed: false)),
-            (0.027, .power(.ac)),
+            (0.027, .power(Power.ac)),
             (4.548, .displays([.dell, .builtIn])),
             (6.030, .displays([.builtIn])),
             (6.935, .displays([.dell, .builtIn])),
@@ -342,7 +342,7 @@ struct ScenarioTests {
             // T10: monitor and charger unplugged while asleep, seen in a dark wake.
             (121.209, .lid(closed: true)),
             (124.804, .lid(closed: true)),
-            (124.810, .power(.battery)),
+            (124.810, .power(Power.battery)),
             (124.811, .expect(.off)),
             (192.037, .lid(closed: false)),
             (192.079, .systemWillPowerOn),

@@ -11,44 +11,22 @@ public struct DisplayInfo: Sendable, Equatable {
         self.isBuiltin = isBuiltin
     }
 
-    public var kind: DisplayKind {
-        DisplayKind(self)
-    }
-}
-
-public enum DisplayKind: Sendable, Equatable {
-    /// The laptop's own screen.
-    case builtIn
-    /// A physical monitor with a vendor ID. Only these count as docked.
-    case external
-    /// macOS's stand-in display, which is not a real monitor.
-    case placeholder
-    /// An external display with no vendor ID, so it can't be identified as a physical monitor.
-    case unidentified
-
-    /// The vendor and model macOS gives its placeholder display: ASCII `unkn` and `virt`.
+    /// The vendor macOS gives its placeholder display: ASCII `unkn` (its model is `virt`, 0x76697274).
     ///
     /// Measured on macOS 27 (MacBook, 2026-11-16): it appears when an external display is
     /// unplugged with the lid closed, and briefly during wake. `CGDisplayIsBuiltin` calls it
     /// external, and after an unplug it stayed in the list for the whole sleep, so counting it
     /// made an undocked Mac look docked.
-    public static let placeholderVendor: UInt32 = 0x756E_6B6E // "unkn", 1970170734
-    public static let placeholderModel: UInt32 = 0x7669_7274 // "virt", 1986622068
+    public static let placeholderVendor: UInt32 = 0x756E_6B6E // 1970170734
 
-    /// Sorts a display conservatively: anything that might not be a physical monitor is not
-    /// `external`, so Tannlaus falls back to turning Bluetooth off. Sidecar, AirPlay and other
-    /// virtual displays are untested; with a vendor ID they would count as external.
-    public init(_ display: DisplayInfo) {
-        if display.isBuiltin {
-            self = .builtIn
-        } else if display.vendor == Self.placeholderVendor {
-            // Any `unkn` vendor, not only the `virt` model seen so far: none is a real monitor.
-            self = .placeholder
-        } else if display.vendor == 0 {
-            self = .unidentified
-        } else {
-            self = .external
-        }
+    /// Whether this is a physical external monitor, the only kind that makes the Mac docked.
+    ///
+    /// Conservative: anything that might not be a real monitor doesn't count, so Tannlaus falls
+    /// back to turning Bluetooth off. That excludes the placeholder (any `unkn` vendor) and
+    /// displays with no vendor ID. Sidecar, AirPlay and other virtual displays are untested; with
+    /// a vendor ID they would count.
+    public var isPhysicalExternal: Bool {
+        !isBuiltin && vendor != Self.placeholderVendor && vendor != 0
     }
 }
 
@@ -60,34 +38,18 @@ public struct DockSnapshot: Sendable, Equatable {
         self.displays = displays
     }
 
-    public var externalDisplays: [DisplayInfo] {
-        displays.filter { $0.kind == .external }
-    }
-
     /// Docked means at least one physical external display.
     public var isDocked: Bool {
-        !externalDisplays.isEmpty
+        displays.contains { $0.isPhysicalExternal }
     }
 
     /// A short, log-friendly explanation, for example
-    /// "docked: external display 4268/16619" or "not docked: built-in only, ignored placeholder".
+    /// "docked: 4268/16619 external, 1552/41041 built-in".
     public var summary: String {
-        let external = externalDisplays.map { "\($0.vendor)/\($0.model)" }
-        var parts: [String]
-        if external.isEmpty {
-            let builtIn = displays.contains { $0.kind == .builtIn }
-            parts = ["not docked: " + (builtIn ? "built-in only" : "no display")]
-        } else {
-            parts = ["docked: external display " + external.joined(separator: ", ")]
+        let list = displays.map { display in
+            let kind = display.isBuiltin ? "built-in" : display.isPhysicalExternal ? "external" : "ignored"
+            return "\(display.vendor)/\(display.model) \(kind)"
         }
-        let placeholders = displays.filter { $0.kind == .placeholder }.count
-        if placeholders > 0 {
-            parts.append("ignored \(placeholders == 1 ? "placeholder" : "\(placeholders) placeholders")")
-        }
-        let unidentified = displays.filter { $0.kind == .unidentified }.map { "0/\($0.model)" }
-        if !unidentified.isEmpty {
-            parts.append("ignored unidentified display " + unidentified.joined(separator: ", "))
-        }
-        return parts.joined(separator: ", ")
+        return (isDocked ? "docked: " : "not docked: ") + (list.isEmpty ? "no displays" : list.joined(separator: ", "))
     }
 }

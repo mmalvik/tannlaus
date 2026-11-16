@@ -24,7 +24,7 @@ public final class DockTracker {
     /// The display state once the list stopped changing.
     private(set) var settled: DockSnapshot
     private var pendingSettle: Cancellable?
-    private var lastPowerSource: PowerSource
+    private var lastPowerSource: String?
 
     /// Called every time the display list settles.
     var onSettled: (() -> Void)?
@@ -36,7 +36,7 @@ public final class DockTracker {
         self.settleDelay = settleDelay
         settled = DockSnapshot(displays: environment.onlineDisplays())
         lastPowerSource = environment.powerSource()
-        logger.info("Displays at launch: \(self.settled.summary, privacy: .public); power: \(self.lastPowerSource.rawValue, privacy: .public)")
+        logger.info("Displays at launch: \(self.settled.summary, privacy: .public); power: \(self.lastPowerSource ?? "unknown", privacy: .public)")
     }
 
     /// Whether a display change is waiting to settle.
@@ -70,7 +70,7 @@ public final class DockTracker {
     func powerSourceUpdated() -> Bool {
         let source = environment.powerSource()
         guard source != lastPowerSource else { return false }
-        logger.info("Power source changed from \(self.lastPowerSource.rawValue, privacy: .public) to \(source.rawValue, privacy: .public)")
+        logger.info("Power source changed from \(self.lastPowerSource ?? "unknown", privacy: .public) to \(source ?? "unknown", privacy: .public)")
         lastPowerSource = source
         return true
     }

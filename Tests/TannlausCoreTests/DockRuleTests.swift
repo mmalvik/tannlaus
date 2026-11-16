@@ -5,7 +5,7 @@ import TannlausCore
 @MainActor
 struct DockRuleTests {
     let scheduler = FakeScheduler()
-    let environment = FakeDockEnvironment(displays: [.dell, .builtIn], source: .ac)
+    let environment = FakeDockEnvironment(displays: [.dell, .builtIn], source: Power.ac)
     let controller = FakeBluetoothController(power: .on)
 
     func makeCoordinator(keepOnWhenDocked: Bool = true) -> PowerCoordinator {
@@ -125,7 +125,7 @@ struct DockRuleTests {
 
     @Test func desktopMacBehavesAsBefore() {
         // A desktop always has a monitor, so the docked rule would keep Bluetooth on forever.
-        let environment = FakeDockEnvironment(displays: [.dell], source: .ac, laptop: false)
+        let environment = FakeDockEnvironment(displays: [.dell], source: Power.ac, laptop: false)
         let coordinator = PowerCoordinator(controller: controller, scheduler: scheduler, environment: environment)
         #expect(!coordinator.isLaptop)
 
@@ -166,7 +166,7 @@ struct DockRuleTests {
         coordinator.handle(.lidChanged(closed: true))
         coordinator.handle(.systemWillPowerOn)
         coordinator.handle(.systemHasPoweredOn)
-        environment.source = .battery
+        environment.source = Power.battery
         coordinator.handle(.powerSourceUpdated)
         #expect(controller.sets == [.off])
     }
@@ -179,7 +179,7 @@ struct DockRuleTests {
         coordinator.handleWillSleep()
 
         environment.displays = [.builtIn]
-        environment.source = .battery
+        environment.source = Power.battery
         coordinator.handle(event)
         #expect(controller.power == .on)
         #expect(environment.heldAssertions == 1)
@@ -272,7 +272,7 @@ struct DockRuleTests {
         coordinator.handle(.lidChanged(closed: false))
         coordinator.handle(.systemWillPowerOn)
         coordinator.handle(.systemHasPoweredOn)
-        environment.source = .battery
+        environment.source = Power.battery
         coordinator.handle(.powerSourceUpdated)
 
         #expect(controller.calls.isEmpty)
@@ -283,11 +283,11 @@ struct DockRuleTests {
         // A charger plugged in while asleep and not docked (T8): system power reports a wake,
         // NSWorkspace doesn't. Bluetooth stays off until the real wake.
         environment.displays = [.builtIn]
-        environment.source = .battery
+        environment.source = Power.battery
         let coordinator = makeCoordinator()
         coordinator.handleWillSleep()
 
-        environment.source = .ac
+        environment.source = Power.ac
         coordinator.handle(.powerSourceUpdated)
         coordinator.handle(.systemWillPowerOn)
         coordinator.handle(.systemHasPoweredOn)
@@ -577,6 +577,19 @@ struct DockRuleTests {
         #expect(controller.sets.count == 1 + RetryPolicy.dock.delays.count)
         #expect(acknowledged == 1)
         #expect(environment.heldAssertions == 0)
+    }
+
+    @Test func settingOffDoesNotWaitForBluetoothCall() {
+        // 1.0 never held back sleep; with the setting off, a running wake restore doesn't either.
+        let coordinator = makeCoordinator(keepOnWhenDocked: false)
+        coordinator.handleWillSleep()
+        scheduler.runsBackgroundInline = false
+        coordinator.handleDidWake()
+        var acknowledged = 0
+
+        coordinator.handleSystemWillSleep { acknowledged += 1 }
+
+        #expect(acknowledged == 1)
     }
 
     @Test func settingOffDoesNotWaitForSettle() {

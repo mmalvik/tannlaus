@@ -1,15 +1,3 @@
-/// Where the Mac gets its power from, as IOKit names it.
-public enum PowerSource: String, Sendable, Equatable {
-    case ac = "AC Power"
-    case battery = "Battery Power"
-    case ups = "UPS Power"
-    case unknown
-
-    public init(name: String?) {
-        self = name.flatMap(PowerSource.init(rawValue:)) ?? .unknown
-    }
-}
-
 /// A change that may mean the Mac was docked or undocked. The app reports these from IOKit and
 /// CoreGraphics; `PowerCoordinator` decides what they mean.
 public enum DockEvent: Sendable, Equatable, CustomStringConvertible {
@@ -45,7 +33,8 @@ public protocol DockEnvironment: AnyObject {
     /// The online displays right now, including mirrored and sleeping ones.
     func onlineDisplays() -> [DisplayInfo]
 
-    func powerSource() -> PowerSource
+    /// Where the Mac gets its power from, as IOKit names it ("AC Power", "Battery Power"), or `nil`.
+    func powerSource() -> String?
 
     /// Whether this Mac is a laptop (it has a built-in battery). Must not fail open: if unknown, false.
     func isLaptop() -> Bool

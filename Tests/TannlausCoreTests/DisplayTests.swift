@@ -4,30 +4,24 @@ import Testing
 /// Classification with the values recorded on the spike MacBook (macOS 27, 2026-11-16).
 struct DisplayTests {
     @Test func classifiesRecordedDisplays() {
-        #expect(DisplayInfo.builtIn.kind == .builtIn)
-        #expect(DisplayInfo.dell.kind == .external)
-        #expect(DisplayInfo.placeholder.kind == .placeholder)
+        #expect(!DisplayInfo.builtIn.isPhysicalExternal)
+        #expect(DisplayInfo.dell.isPhysicalExternal)
+        #expect(!DisplayInfo.placeholder.isPhysicalExternal)
     }
 
-    @Test func placeholderValuesAreAsciiUnknVirt() {
-        #expect(DisplayKind.placeholderVendor == 1970170734)
-        #expect(DisplayKind.placeholderModel == 1986622068)
+    @Test func placeholderVendorIsAsciiUnkn() {
+        #expect(DisplayInfo.placeholderVendor == 1970170734)
+        #expect(DisplayInfo.placeholder.vendor == DisplayInfo.placeholderVendor)
     }
 
-    @Test func anyUnknVendorIsAPlaceholder() {
-        let other = DisplayInfo(vendor: DisplayKind.placeholderVendor, model: 1, isBuiltin: false)
-        #expect(other.kind == .placeholder)
+    @Test func anyUnknVendorIsIgnored() {
+        #expect(!DisplayInfo(vendor: DisplayInfo.placeholderVendor, model: 1, isBuiltin: false).isPhysicalExternal)
     }
 
     @Test func externalDisplayWithoutVendorIsNotCounted() {
         let display = DisplayInfo(vendor: 0, model: 0, isBuiltin: false)
-        #expect(display.kind == .unidentified)
+        #expect(!display.isPhysicalExternal)
         #expect(!DockSnapshot(displays: [.builtIn, display]).isDocked)
-    }
-
-    @Test func builtInWinsOverVendor() {
-        // The built-in flag decides, whatever the vendor says.
-        #expect(DisplayInfo(vendor: DisplayKind.placeholderVendor, model: 0, isBuiltin: true).kind == .builtIn)
     }
 
     @Test(arguments: [
@@ -43,26 +37,16 @@ struct DisplayTests {
     }
 
     @Test func summaryExplainsTheDecision() {
-        #expect(DockSnapshot(displays: [.dell, .builtIn]).summary == "docked: external display 4268/16619")
-        #expect(DockSnapshot(displays: [.placeholder]).summary == "not docked: no display, ignored placeholder")
-        #expect(DockSnapshot(displays: [.builtIn]).summary == "not docked: built-in only")
-        #expect(DockSnapshot(displays: [.builtIn, DisplayInfo(vendor: 0, model: 7, isBuiltin: false)]).summary
-            == "not docked: built-in only, ignored unidentified display 0/7")
-    }
-
-    @Test func powerSourceNames() {
-        #expect(PowerSource(name: "AC Power") == .ac)
-        #expect(PowerSource(name: "Battery Power") == .battery)
-        #expect(PowerSource(name: "UPS Power") == .ups)
-        #expect(PowerSource(name: "Something new") == .unknown)
-        #expect(PowerSource(name: nil) == .unknown)
+        #expect(DockSnapshot(displays: [.dell, .builtIn]).summary == "docked: 4268/16619 external, 1552/41041 built-in")
+        #expect(DockSnapshot(displays: [.placeholder]).summary == "not docked: 1970170734/1986622068 ignored")
+        #expect(DockSnapshot(displays: []).summary == "not docked: no displays")
     }
 }
 
 @MainActor
 struct DockTrackerTests {
     let scheduler = FakeScheduler()
-    let environment = FakeDockEnvironment(displays: [.dell, .builtIn], source: .ac)
+    let environment = FakeDockEnvironment(displays: [.dell, .builtIn], source: Power.ac)
 
     func makeTracker() -> DockTracker {
         DockTracker(environment: environment, scheduler: scheduler, settleDelay: .seconds(3))
@@ -115,10 +99,10 @@ struct DockTrackerTests {
         let tracker = makeTracker()
 
         #expect(!tracker.powerSourceUpdated())
-        environment.source = .battery
+        environment.source = Power.battery
         #expect(tracker.powerSourceUpdated())
         #expect(!tracker.powerSourceUpdated())
-        environment.source = .ac
+        environment.source = Power.ac
         #expect(tracker.powerSourceUpdated())
     }
 }

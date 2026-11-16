@@ -127,6 +127,9 @@ final class DockEvents {
     private nonisolated static let systemWillPowerOn: UInt32 = 0xE000_0320 // kIOMessageSystemWillPowerOn
 
     /// Runs `body` on the main actor with the instance behind a C callback's context pointer.
+    /// The IOKit sources are registered on the main run loop or main queue, but CoreGraphics
+    /// doesn't document which thread runs display callbacks, so anything off the main thread is
+    /// sent there rather than trapping in `MainActor.assumeIsolated`.
     /// C callbacks can't capture context, so this names the type rather than using `Self`.
     private nonisolated static func deliver(
         _ context: UnsafeMutableRawPointer?,

@@ -6,7 +6,7 @@ import os
 import TannlausCore
 
 /// Reads displays and the power source, and takes sleep assertions. No decisions here: they are in
-/// `TannlausCore` (`DisplayKind`, `DockTracker`, `PowerCoordinator`).
+/// `TannlausCore` (`DisplayInfo`, `DockTracker`, `PowerCoordinator`).
 @MainActor
 final class SystemDockEnvironment: DockEnvironment {
     private let logger = Logger(category: "dock")
@@ -24,8 +24,8 @@ final class SystemDockEnvironment: DockEnvironment {
         }
     }
 
-    func powerSource() -> PowerSource {
-        PowerSource(name: IOPSGetProvidingPowerSourceType(nil)?.takeUnretainedValue() as String?)
+    func powerSource() -> String? {
+        IOPSGetProvidingPowerSourceType(nil)?.takeUnretainedValue() as String?
     }
 
     /// A laptop has an internal battery among its power sources. If they can't be read, this

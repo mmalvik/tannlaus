@@ -159,11 +159,11 @@ final class FakeDockEnvironment: DockEnvironment {
     }
 
     var displays: [DisplayInfo]
-    var source: PowerSource
+    var source: String?
     var laptop: Bool
     private(set) var assertions: [Assertion] = []
 
-    init(displays: [DisplayInfo] = [.builtIn], source: PowerSource = .battery, laptop: Bool = true) {
+    init(displays: [DisplayInfo] = [.builtIn], source: String? = Power.battery, laptop: Bool = true) {
         self.displays = displays
         self.source = source
         self.laptop = laptop
@@ -177,7 +177,7 @@ final class FakeDockEnvironment: DockEnvironment {
         displays
     }
 
-    func powerSource() -> PowerSource {
+    func powerSource() -> String? {
         source
     }
 
@@ -196,6 +196,12 @@ final class FakeDockEnvironment: DockEnvironment {
     var heldAssertions: Int {
         assertions.filter { !$0.isReleased }.count
     }
+}
+
+/// Power source names as IOKit reports them.
+enum Power {
+    static let ac = "AC Power"
+    static let battery = "Battery Power"
 }
 
 /// Displays as recorded on the spike MacBook (macOS 27, 2026-11-16).
