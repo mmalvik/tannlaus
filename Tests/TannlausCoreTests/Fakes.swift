@@ -187,6 +187,11 @@ final class FakeDockEnvironment: DockEnvironment {
         return assertion
     }
 
+    /// macOS releases assertions when their timeout runs out.
+    func expireAssertions() {
+        assertions.forEach { $0.cancel() }
+    }
+
     /// Sleep assertions taken and not yet released.
     var heldAssertions: Int {
         assertions.filter { !$0.isReleased }.count

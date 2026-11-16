@@ -174,16 +174,52 @@ struct DockRuleTests {
     @Test(arguments: [DockEvent.powerSourceUpdated, .lidChanged(closed: true), .systemWillPowerOn, .systemHasPoweredOn])
     func undockSeenWithoutDisplayEventTurnsBluetoothOff(_ event: DockEvent) {
         // Unplugged while asleep: a dark wake reports the power source and lid, but no display
-        // change (T10). The list is read again and is quiet, so it counts at once.
+        // change (T10). The list is read again and is quiet, so it counts after the wake grace.
         let coordinator = makeCoordinator()
         coordinator.handleWillSleep()
 
         environment.displays = [.builtIn]
         environment.source = .battery
         coordinator.handle(event)
+        #expect(controller.power == .on)
+        #expect(environment.heldAssertions == 1)
 
+        scheduler.advance(by: PowerCoordinator.wakeGrace)
         #expect(controller.power == .off)
         #expect(controller.sets == [.off])
+        #expect(environment.heldAssertions == 0)
+    }
+
+    @Test func fullWakeDoesNotSwitchBeforeRestoring() {
+        // Unplugged while asleep and not noticed until the lid opens: system power "will power
+        // on" comes 0.01–0.45 s before NSWorkspace "did wake". Bluetooth must not go off and on.
+        let coordinator = makeCoordinator()
+        coordinator.handleWillSleep()
+        environment.displays = [.builtIn]
+
+        coordinator.handle(.lidChanged(closed: false))
+        coordinator.handle(.systemWillPowerOn)
+        scheduler.advance(by: .milliseconds(300))
+        coordinator.handle(.systemHasPoweredOn)
+        coordinator.handleDidWake()
+        scheduler.advance(by: .seconds(10))
+
+        #expect(!controller.sets.contains(.off))
+        #expect(controller.power == .on)
+        #expect(environment.heldAssertions == 0)
+    }
+
+    @Test func repeatedEventsDontPostponeTheWakeGrace() {
+        let coordinator = makeCoordinator()
+        coordinator.handleWillSleep()
+        environment.displays = [.builtIn]
+
+        coordinator.handle(.lidChanged(closed: true))
+        scheduler.advance(by: .milliseconds(600))
+        coordinator.handle(.lidChanged(closed: true))
+        scheduler.advance(by: .milliseconds(400))
+
+        #expect(controller.power == .off)
     }
 
     @Test func batteryLevelUpdateDoesNotReadDisplays() {
@@ -274,7 +310,6 @@ struct DockRuleTests {
         scheduler.advance(by: DockTracker.defaultSettleDelay)
         #expect(controller.power == .off)
         #expect(environment.heldAssertions == 0)
-        #expect(environment.assertions.count == 1) // One assertion across settle and switch.
     }
 
     @Test func noAssertionWhileSettlingAwake() {
@@ -298,7 +333,44 @@ struct DockRuleTests {
         scheduler.finishBackgroundWork()
         #expect(controller.power == .off)
         #expect(environment.heldAssertions == 0)
-        #expect(environment.assertions.count == 1)
+    }
+
+    @Test func expiredSleepAssertionIsTakenAgain() {
+        // macOS releases the assertion after its 30 s timeout, for example across a sleep in the
+        // middle of a settle. The next event takes a new one.
+        let coordinator = makeCoordinator()
+        coordinator.handleWillSleep()
+        environment.displays = [.builtIn]
+        coordinator.handle(.displaysChanged)
+        #expect(environment.heldAssertions == 1)
+
+        environment.expireAssertions()
+        coordinator.handle(.lidChanged(closed: true))
+
+        #expect(environment.heldAssertions == 1)
+        scheduler.advance(by: DockTracker.defaultSettleDelay)
+        #expect(environment.heldAssertions == 0)
+    }
+
+    @Test func neverHoldsMoreThanOneAssertion() {
+        let coordinator = makeCoordinator()
+        coordinator.handleWillSleep()
+        scheduler.runsBackgroundInline = false
+        controller.ignoredSets = 1
+
+        environment.displays = [.builtIn]
+        coordinator.handle(.displaysChanged)
+        coordinator.handle(.lidChanged(closed: true))
+        #expect(environment.heldAssertions == 1)
+        scheduler.advance(by: DockTracker.defaultSettleDelay)
+        #expect(environment.heldAssertions == 1)
+        scheduler.finishBackgroundWork() // Fails; a retry is scheduled.
+        #expect(environment.heldAssertions == 1)
+        scheduler.advance(by: RetryPolicy.dock.delays[0])
+        scheduler.finishBackgroundWork()
+
+        #expect(controller.power == .off)
+        #expect(environment.heldAssertions == 0)
     }
 
     @Test func noAssertionWhenNothingChanges() {
@@ -468,6 +540,42 @@ struct DockRuleTests {
         scheduler.advance(by: DockTracker.defaultSettleDelay)
         #expect(acknowledged == 1)
         #expect(controller.power == .off)
+        #expect(environment.heldAssertions == 0)
+    }
+
+    @Test func systemSleepWaitsForPendingDockRetry() {
+        // An undock seen in a brief wake, and the first attempt doesn't take: the Mac must not
+        // sleep between the attempt and its retry.
+        let coordinator = makeCoordinator()
+        coordinator.handleWillSleep()
+        controller.ignoredSets = 1
+        environment.displays = [.builtIn]
+        var acknowledged = 0
+
+        coordinator.handleSystemWillSleep { acknowledged += 1 }
+        #expect(acknowledged == 0) // Waiting out the wake grace.
+        scheduler.advance(by: PowerCoordinator.wakeGrace)
+        #expect(controller.sets == [.off])
+        #expect(controller.power == .on)
+        #expect(acknowledged == 0) // The retry is still pending.
+
+        scheduler.advance(by: RetryPolicy.dock.delays[0])
+        #expect(controller.power == .off)
+        #expect(acknowledged == 1)
+    }
+
+    @Test func systemSleepIsAcknowledgedAfterDockChangeGivesUp() {
+        let coordinator = makeCoordinator()
+        coordinator.handleWillSleep()
+        controller.ignoredSets = 100
+        environment.displays = [.builtIn]
+        var acknowledged = 0
+
+        coordinator.handleSystemWillSleep { acknowledged += 1 }
+        scheduler.advance(by: .seconds(30))
+
+        #expect(controller.sets.count == 1 + RetryPolicy.dock.delays.count)
+        #expect(acknowledged == 1)
         #expect(environment.heldAssertions == 0)
     }
 

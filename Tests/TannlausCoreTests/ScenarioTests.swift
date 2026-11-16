@@ -282,7 +282,8 @@ struct ScenarioTests {
             (72.829, .lid(closed: false)),
             (100.000, .displaysSilently([.builtIn])), // Unplugged while asleep.
             (121.209, .lid(closed: true)),
-            (121.210, .expect(.off)),
+            (121.210, .expect(.on)), // Waiting out the wake grace.
+            (122.300, .expect(.off)),
             (124.804, .lid(closed: true)),
             (124.810, .power(.battery)),
             (124.811, .expect(.off)),
@@ -294,6 +295,24 @@ struct ScenarioTests {
             (192.299, .expect(.on)),
         ])
         #expect(controller.sets == [.off, .on])
+    }
+
+    @Test func undockNoticedOnlyAtFullWakeDoesNotFlapBluetooth() {
+        // Monitor unplugged while asleep with no dark wake to notice it; the lid is opened later.
+        // Wake events with T3's timings: Bluetooth stays on, never off then on again.
+        replay(displays: [.dell, .builtIn], power: .ac, [
+            (0.000, .systemWillSleep),
+            (0.009, .willSleep),
+            (0.010, .expect(.on)),
+            (40.000, .displaysSilently([.builtIn])),
+            (99.601, .lid(closed: false)),
+            (99.602, .systemWillPowerOn),
+            (99.671, .displaysTouched),
+            (100.016, .systemHasPoweredOn),
+            (100.022, .didWake),
+            (100.023, .expect(.on)),
+        ])
+        #expect(!controller.sets.contains(.off))
     }
 
     @Test func t9LidClosedOnSleepingDockedMacThenT10Undock() {

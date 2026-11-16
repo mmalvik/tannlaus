@@ -29,26 +29,27 @@ Run the relevant checks for a change, and all of them before a release.
 
 ### Sleep
 
-1. No monitor, Bluetooth on: close the lid, wait a minute, open it. Bluetooth is off while asleep and back on after wake.
+1. No monitor, Bluetooth on: `pmset sleepnow`, then wake. Bluetooth comes back on. Repeat by closing the lid for a minute: Bluetooth is off while asleep and back on after wake.
 2. Bluetooth off: sleep and wake. It stays off.
-3. Monitor connected, Bluetooth keyboard: Apple menu > Sleep, wait a minute, press a key on the Bluetooth keyboard. The Mac wakes. The log shows a "Dock check (will sleep): docked …; keeping Bluetooth on" line.
-4. As 3 with "Keep Bluetooth on when docked" turned off: the Bluetooth keyboard can't wake the Mac, and Bluetooth is back on after wake.
+3. No monitor, headset connected: close the lid, then turn the headset off and on again away from the Mac. It pairs with the phone, not the Mac.
+4. Monitor connected, Bluetooth keyboard: Apple menu > Sleep, wait a minute, press a key on the Bluetooth keyboard. The Mac wakes. The log shows a "Dock check (will sleep): docked …; keeping Bluetooth on" line.
+5. As 4 with "Keep Bluetooth on when docked" turned off: the Bluetooth keyboard can't wake the Mac, and Bluetooth is back on after wake.
 
 ### Permission
 
-5. Reset permission with `tccutil reset BluetoothAlways com.tannlaus.app`, open the app and click Don't Allow: the app keeps running, the menu shows "Bluetooth access denied", and sleep and wake leave Bluetooth untouched. Allow it in System Settings: the app works again without a relaunch.
+6. Reset permission with `tccutil reset BluetoothAlways com.tannlaus.app`, open the app and click Don't Allow: the app keeps running, the menu shows "Bluetooth access denied", and sleep and wake leave Bluetooth untouched. Allow it in System Settings: the app works again without a relaunch.
 
 ### Menu
 
-6. Hide the icon, then open the app again: the icon is back and Quit is reachable.
-7. Turn on Launch at login, then log out and in: the app is running and Bluetooth is unchanged.
-8. Turn "Keep Bluetooth on when docked" off, quit and reopen: it is still off. On a desktop Mac, if you have one, the item isn't in the menu.
+7. Hide the icon, then open the app again: the icon is back and Quit is reachable.
+8. Turn on Launch at login, then log out and in: the app is running and Bluetooth is unchanged.
+9. Turn "Keep Bluetooth on when docked" off, quit and reopen: it is still off. On a desktop Mac, if you have one, the item isn't in the menu.
 
 ### Install (release builds)
 
-9. `brew install --cask mmalvik/tap/tannlaus` on a clean Mac: the app opens with no Gatekeeper warning.
-10. `brew upgrade` to a newer release: Bluetooth permission, Launch at login and the docked setting are still in place.
-11. `brew uninstall --zap --cask tannlaus`: the app quits and is removed, and its container and preferences are gone.
+10. `brew install --cask mmalvik/tap/tannlaus` on a clean Mac: the app opens with no Gatekeeper warning.
+11. `brew upgrade` to a newer release: Bluetooth permission, Launch at login and the docked setting are still in place.
+12. `brew uninstall --zap --cask tannlaus`: the app quits and is removed, and its container and preferences are gone.
 
 ## Re-running the spike
 

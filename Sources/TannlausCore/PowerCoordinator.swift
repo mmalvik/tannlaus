@@ -54,9 +54,19 @@ public final class PowerCoordinator {
     /// A change running in the background or waiting for a retry.
     private var work: Work?
     private var pendingRetry: Cancellable?
-    /// Held while asleep and a display change is settling or a dock change runs, so a dark wake
-    /// doesn't end halfway through. See `updateSleepAssertion()`.
+    /// Held while asleep and docked-rule work is pending, so a dark wake doesn't end halfway
+    /// through. See `updateSleepAssertion()`.
     private var sleepAssertion: Cancellable?
+    /// A re-check that would switch Bluetooth, waiting out `wakeGrace` in case this is a full wake.
+    private var pendingRecheck: Cancellable?
+
+    /// How long a re-check from a lid, power or system power event waits before switching.
+    ///
+    /// Measured on macOS 27 (2026-11-16): on a full wake, system power "will power on" and the lid
+    /// event arrive 0.01–0.45 s before NSWorkspace "did wake" (T1–T10). Acting on them at once could
+    /// turn Bluetooth off just before the wake restore turns it on again. Brief charger wakes
+    /// lasted 1.6–4.3 s from "will power on" to "will sleep", and sleep waits for this anyway.
+    public static let wakeGrace: Duration = .seconds(1)
     /// Bumped by every sleep, wake and new dock change, so results from work they interrupted are ignored.
     private var generation = 0
     /// Calls to the controller running in the background, and system sleep acknowledgements waiting
@@ -113,7 +123,10 @@ public final class PowerCoordinator {
     public func handleWillSleep() {
         logger.info("Will sleep")
         // A display change still settling (an undock right before sleep) needs the Mac awake.
-        defer { updateSleepAssertion() }
+        defer {
+            updateSleepAssertion()
+            acknowledgeSleepIfIdle()
+        }
         if interruptWork() == .restore, wasOnBeforeSleep == nil {
             // A wake restore was still in progress, so the user's Bluetooth was on. Record it even
             // without access, so the next wake still restores it.
@@ -159,7 +172,10 @@ public final class PowerCoordinator {
 
     public func handleDidWake() {
         logger.info("Did wake")
-        defer { updateSleepAssertion() }
+        defer {
+            updateSleepAssertion()
+            acknowledgeSleepIfIdle()
+        }
         let interrupted = interruptWork()
         dockTarget = nil
 
@@ -201,12 +217,13 @@ public final class PowerCoordinator {
             // An undock while asleep may come with no display event at all, so read the list again.
             dock.refreshIfQuiet()
         }
-        recheckDock(after: event.description)
+        recheckDock(after: event.description, immediately: false)
     }
 
-    /// System power "will sleep". Re-checks the dock, then acknowledges once no display change is
-    /// settling and no Bluetooth call is running, so the Mac can't sleep halfway through.
-    /// macOS waits up to 30 s for this.
+    /// System power "will sleep". Re-checks the dock, then acknowledges once no docked-rule work is
+    /// pending and no Bluetooth call is running, so the Mac can't sleep halfway through.
+    /// macOS waits up to 30 s for this. The longest wait is a settle (3 s), the wake grace (1 s)
+    /// and a dock change with all its retries (about 19 s with the controller's timeouts).
     public func handleSystemWillSleep(acknowledge: @escaping @MainActor () -> Void) {
         handle(.systemWillSleep)
         pendingAcknowledgements.append(acknowledge)
@@ -217,12 +234,14 @@ public final class PowerCoordinator {
     }
 
     private func displaysSettled() {
-        recheckDock(after: "displays settled")
+        recheckDock(after: "displays settled", immediately: true)
         updateSleepAssertion()
         acknowledgeSleepIfIdle()
     }
 
-    private func recheckDock(after event: String) {
+    /// Re-checks the dock while asleep. A change found after a lid, power or system power event
+    /// waits `wakeGrace` first, and a wake or new sleep in between cancels it.
+    private func recheckDock(after event: String, immediately: Bool) {
         // Only while asleep with Bluetooth recorded as on: awake, or with Bluetooth off, there is nothing to keep.
         guard dockRuleApplies, wasOnBeforeSleep == true else { return }
         guard isAuthorized(for: "dock check") else { return }
@@ -232,6 +251,18 @@ public final class PowerCoordinator {
             // Already there, already switching, or gave up: never start again for the same answer.
             let action = work == nil ? "Bluetooth stays \(target.rawValue)" : "already turning Bluetooth \(target.rawValue)"
             logDockDecision(at: event, action: action, changes: false)
+            return
+        }
+        guard immediately else {
+            guard pendingRecheck == nil else { return } // Don't postpone the one already waiting.
+            logger.info("Dock check (\(event, privacy: .public)): would turn Bluetooth \(target.rawValue, privacy: .public); waiting in case this is a full wake")
+            pendingRecheck = scheduler.schedule(after: Self.wakeGrace) { [weak self] in
+                guard let self else { return }
+                self.pendingRecheck = nil
+                self.recheckDock(after: event, immediately: true)
+                self.updateSleepAssertion()
+                self.acknowledgeSleepIfIdle()
+            }
             return
         }
         logDockDecision(at: event, action: "turning Bluetooth \(target.rawValue)", changes: true)
@@ -247,10 +278,19 @@ public final class PowerCoordinator {
         logger.log(level: level, "Dock check (\(event, privacy: .public)): \(self.dock.settled.summary, privacy: .public); \(action, privacy: .public)")
     }
 
-    /// Whether a system sleep acknowledgement must wait: a Bluetooth call is running, or a display
-    /// change is settling that may change what the docked rule wants.
+    /// Docked-rule work that may still change Bluetooth: a display change settling, a re-check
+    /// waiting out the wake grace, or a dock change running or waiting for a retry.
+    private var dockWorkPending: Bool {
+        guard dockRuleApplies else { return false }
+        if dock.isSettling || pendingRecheck != nil { return true }
+        if case .dock = work { return true }
+        return false
+    }
+
+    /// Whether a system sleep acknowledgement must wait: a Bluetooth call is running, or
+    /// docked-rule work is pending.
     private var isBusy: Bool {
-        callsInBackground > 0 || (dockRuleApplies && dock.isSettling)
+        callsInBackground > 0 || dockWorkPending
     }
 
     private func acknowledgeSleepIfIdle() {
@@ -260,20 +300,17 @@ public final class PowerCoordinator {
         acknowledgements.forEach { $0() }
     }
 
-    /// Holds a sleep assertion while asleep with Bluetooth recorded as on and the docked rule has
-    /// work to do: a display change settling, or a dock change running or waiting for a retry.
-    /// Dark wakes lasted 8–22 s when measured, and the settle alone takes 3 s.
+    /// Holds a sleep assertion while asleep with Bluetooth recorded as on and docked-rule work is
+    /// pending. Dark wakes lasted 8–22 s when measured, and the settle alone takes 3 s.
+    ///
+    /// The assertion times out after 30 s, and macOS may sleep while it is held (on battery), so
+    /// it is renewed on every call while needed: each event, settle, attempt and retry. Taking the
+    /// new one before releasing the old leaves no gap.
     private func updateSleepAssertion() {
-        var dockWork = false
-        if case .dock = work { dockWork = true }
-        let needed = dockRuleApplies && wasOnBeforeSleep == true && (dock.isSettling || dockWork)
-            && controller.authorization == .allowed
-        if needed, sleepAssertion == nil {
-            sleepAssertion = environment.preventSleep(reason: "Tannlaus is checking the dock while the Mac sleeps")
-        } else if !needed, let assertion = sleepAssertion {
-            assertion.cancel()
-            sleepAssertion = nil
-        }
+        let needed = wasOnBeforeSleep == true && dockWorkPending && controller.authorization == .allowed
+        let previous = sleepAssertion
+        sleepAssertion = needed ? environment.preventSleep(reason: "Tannlaus is checking the dock while the Mac sleeps") : nil
+        previous?.cancel()
     }
 
     // MARK: Switching
@@ -322,10 +359,14 @@ public final class PowerCoordinator {
             Self.attempt(target, number: attempt, controller: controller, logger: logger)
         }, then: { [weak self] succeeded in
             guard let self else { return }
-            self.backgroundCallFinished()
-            guard self.generation == generation else { return } // A sleep, wake or newer dock change took over.
-            self.attemptFinished(work, attempt: attempt, succeeded: succeeded)
+            self.callsInBackground -= 1
+            // Ignored if a sleep, wake or newer dock change took over.
+            if self.generation == generation {
+                self.attemptFinished(work, attempt: attempt, succeeded: succeeded)
+            }
+            // After scheduling any retry, so a pending retry still holds back the sleep acknowledgement.
             self.updateSleepAssertion()
+            self.acknowledgeSleepIfIdle()
         })
     }
 
@@ -345,6 +386,7 @@ public final class PowerCoordinator {
         pendingRetry = scheduler.schedule(after: delay) { [weak self] in
             self?.runInBackground(work, attempt: attempt + 1)
             self?.updateSleepAssertion()
+            self?.acknowledgeSleepIfIdle()
         }
     }
 
@@ -352,18 +394,15 @@ public final class PowerCoordinator {
         work = nil
     }
 
-    private func backgroundCallFinished() {
-        callsInBackground -= 1
-        acknowledgeSleepIfIdle()
-    }
-
-    /// Stops the work in progress: cancels its pending retry and ignores the result of a call
-    /// still running. Returns the work that was in progress, if any.
+    /// Stops the work in progress: cancels its pending retry and any re-check waiting out the wake
+    /// grace, and ignores the result of a call still running. Returns the work that was in progress, if any.
     @discardableResult
     private func interruptWork() -> Work? {
         generation += 1
         pendingRetry?.cancel()
         pendingRetry = nil
+        pendingRecheck?.cancel()
+        pendingRecheck = nil
         guard let work else { return nil }
         self.work = nil
         switch work {
