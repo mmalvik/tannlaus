@@ -11,9 +11,9 @@ The adapters in `Sources/Tannlaus` (CoreBluetooth, IOKit, CoreGraphics, AppKit) 
 ## What the tests cover
 
 - **`PowerCoordinatorTests`:** sleep and wake as in 1.0 (not docked): recording, restoring, read-back, retries with backoff, giving up, background restore, interrupted restores and permission.
-- **`DockRuleTests`:** "Keep Bluetooth on when docked": the rule at sleep, the setting, the settled state at will-sleep, re-checks while asleep, brief wakes that must not restore, sleep assertions, retries and cancellation, permission and the delayed system sleep acknowledgement.
+- **`DockRuleTests`:** "Keep Bluetooth on when docked": the rule at sleep, the setting, desktop Macs, the settled state at will-sleep, re-checks while asleep (with and without a display event), brief wakes that must not restore, sleep assertions, retries and cancellation, permission and the delayed system sleep acknowledgement.
 - **`DisplayTests`:** display classification with the values recorded on real hardware (built-in 1552/41041, Dell 4268/16619, macOS's placeholder `unkn`/`virt`), the settle timer and the power source filter.
-- **`ScenarioTests`:** the event sequences recorded by the clamshell spike (T1–T10), replayed with their real order and timing. Each test checks Bluetooth at the points where it matters and that nothing is left pending.
+- **`ScenarioTests`:** the event sequences recorded by the clamshell spike (T1–T10), replayed with their real order and timing, plus T10's unplug on its own. Each test checks Bluetooth at the points where it matters and that nothing is left pending.
 
 When macOS behaves in a new way, record it (see "Re-running the spike") and add it as a scenario. When you change the logic, the scenarios show which recorded situation it breaks.
 
@@ -42,7 +42,7 @@ Run the relevant checks for a change, and all of them before a release.
 
 6. Hide the icon, then open the app again: the icon is back and Quit is reachable.
 7. Turn on Launch at login, then log out and in: the app is running and Bluetooth is unchanged.
-8. Turn "Keep Bluetooth on when docked" off, quit and reopen: it is still off.
+8. Turn "Keep Bluetooth on when docked" off, quit and reopen: it is still off. On a desktop Mac, if you have one, the item isn't in the menu.
 
 ### Install (release builds)
 

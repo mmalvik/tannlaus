@@ -28,7 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settings: settings,
             loginItem: LoginItem(),
             monitor: monitor,
-            canControlBluetooth: controller.isAvailable
+            canControlBluetooth: controller.isAvailable,
+            showsDockSetting: coordinator.isLaptop
         )
         self.statusMenu = statusMenu
         statusMenu.onKeepOnWhenDockedChange = { [weak coordinator, logger] enabled in

@@ -160,11 +160,17 @@ final class FakeDockEnvironment: DockEnvironment {
 
     var displays: [DisplayInfo]
     var source: PowerSource
+    var laptop: Bool
     private(set) var assertions: [Assertion] = []
 
-    init(displays: [DisplayInfo] = [.builtIn], source: PowerSource = .battery) {
+    init(displays: [DisplayInfo] = [.builtIn], source: PowerSource = .battery, laptop: Bool = true) {
         self.displays = displays
         self.source = source
+        self.laptop = laptop
+    }
+
+    func isLaptop() -> Bool {
+        laptop
     }
 
     func onlineDisplays() -> [DisplayInfo] {

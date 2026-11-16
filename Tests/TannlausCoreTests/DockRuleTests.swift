@@ -123,6 +123,28 @@ struct DockRuleTests {
         #expect(controller.power == .on)
     }
 
+    @Test func desktopMacBehavesAsBefore() {
+        // A desktop always has a monitor, so the docked rule would keep Bluetooth on forever.
+        let environment = FakeDockEnvironment(displays: [.dell], source: .ac, laptop: false)
+        let coordinator = PowerCoordinator(controller: controller, scheduler: scheduler, environment: environment)
+        #expect(!coordinator.isLaptop)
+
+        coordinator.handleWillSleep()
+        #expect(controller.power == .off)
+        environment.displays = [.dell]
+        coordinator.handle(.displaysChanged)
+        var acknowledged = false
+        coordinator.handleSystemWillSleep { acknowledged = true }
+        #expect(acknowledged) // Not held back for the settle.
+        scheduler.advance(by: .seconds(10))
+        coordinator.handle(.lidChanged(closed: false))
+        #expect(controller.sets == [.off])
+        #expect(environment.assertions.isEmpty)
+
+        coordinator.handleDidWake()
+        #expect(controller.sets == [.off, .on])
+    }
+
     @Test func launchDoesNotTouchBluetoothWhenDocked() {
         _ = makeCoordinator()
 
@@ -147,6 +169,51 @@ struct DockRuleTests {
         environment.source = .battery
         coordinator.handle(.powerSourceUpdated)
         #expect(controller.sets == [.off])
+    }
+
+    @Test(arguments: [DockEvent.powerSourceUpdated, .lidChanged(closed: true), .systemWillPowerOn, .systemHasPoweredOn])
+    func undockSeenWithoutDisplayEventTurnsBluetoothOff(_ event: DockEvent) {
+        // Unplugged while asleep: a dark wake reports the power source and lid, but no display
+        // change (T10). The list is read again and is quiet, so it counts at once.
+        let coordinator = makeCoordinator()
+        coordinator.handleWillSleep()
+
+        environment.displays = [.builtIn]
+        environment.source = .battery
+        coordinator.handle(event)
+
+        #expect(controller.power == .off)
+        #expect(controller.sets == [.off])
+    }
+
+    @Test func batteryLevelUpdateDoesNotReadDisplays() {
+        let coordinator = makeCoordinator()
+        coordinator.handleWillSleep()
+
+        environment.displays = [.builtIn]
+        coordinator.handle(.powerSourceUpdated) // Same source: a battery level update.
+
+        #expect(controller.power == .on)
+        #expect(coordinator.dockSnapshot.isDocked)
+    }
+
+    @Test func otherEventsDontCutShortASettle() {
+        // Wake flicker: the monitor is removed and its display event starts the settle; lid and
+        // system power events during it must not take the list at that instant.
+        let coordinator = makeCoordinator()
+        coordinator.handleWillSleep()
+        environment.displays = [.builtIn]
+        coordinator.handle(.displaysChanged)
+
+        coordinator.handle(.lidChanged(closed: true))
+        coordinator.handle(.systemHasPoweredOn)
+        #expect(coordinator.dockSnapshot.isDocked)
+        #expect(controller.power == .on)
+
+        environment.displays = [.dell, .builtIn]
+        coordinator.handle(.displaysChanged)
+        scheduler.advance(by: .seconds(10))
+        #expect(controller.sets.isEmpty)
     }
 
     @Test func dockedAgainWhileAsleepTurnsBluetoothOn() {
@@ -194,6 +261,28 @@ struct DockRuleTests {
 
         #expect(controller.power == .off)
         #expect(controller.sets == [.off])
+    }
+
+    @Test func holdsSleepAssertionWhileSettlingAsleep() {
+        let coordinator = makeCoordinator()
+        coordinator.handleWillSleep()
+
+        environment.displays = [.builtIn]
+        coordinator.handle(.displaysChanged)
+        #expect(environment.heldAssertions == 1)
+
+        scheduler.advance(by: DockTracker.defaultSettleDelay)
+        #expect(controller.power == .off)
+        #expect(environment.heldAssertions == 0)
+        #expect(environment.assertions.count == 1) // One assertion across settle and switch.
+    }
+
+    @Test func noAssertionWhileSettlingAwake() {
+        let coordinator = makeCoordinator()
+        environment.displays = [.builtIn]
+        coordinator.handle(.displaysChanged)
+
+        #expect(environment.heldAssertions == 0)
     }
 
     @Test func holdsSleepAssertionOnlyWhileSwitching() {
@@ -361,6 +450,36 @@ struct DockRuleTests {
         scheduler.finishBackgroundWork()
         #expect(acknowledged == 1)
         #expect(controller.power == .off)
+    }
+
+    @Test func systemSleepWaitsForPendingSettle() {
+        // T6: the undock arrives 0.2 s before system will-sleep, which comes before NSWorkspace's.
+        let coordinator = makeCoordinator()
+        environment.displays = [.placeholder]
+        coordinator.handle(.displaysChanged)
+        var acknowledged = 0
+
+        coordinator.handleSystemWillSleep { acknowledged += 1 }
+        coordinator.handleWillSleep()
+        #expect(acknowledged == 0)
+        #expect(controller.power == .on) // The settled state still says docked.
+        #expect(environment.heldAssertions == 1)
+
+        scheduler.advance(by: DockTracker.defaultSettleDelay)
+        #expect(acknowledged == 1)
+        #expect(controller.power == .off)
+        #expect(environment.heldAssertions == 0)
+    }
+
+    @Test func settingOffDoesNotWaitForSettle() {
+        let coordinator = makeCoordinator(keepOnWhenDocked: false)
+        environment.displays = [.builtIn]
+        coordinator.handle(.displaysChanged)
+        var acknowledged = 0
+
+        coordinator.handleSystemWillSleep { acknowledged += 1 }
+
+        #expect(acknowledged == 1)
     }
 
     @Test func systemSleepIsAcknowledgedEvenIfTheCallWasInterrupted() {

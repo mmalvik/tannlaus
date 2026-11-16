@@ -1,12 +1,14 @@
 # Sleeping at a desk (clamshell and docked)
 
-Tannlaus 1.0 turned Bluetooth off at every sleep. At a desk, with the lid closed next to a monitor (clamshell mode) or open beside it, that left a Bluetooth keyboard unable to wake the Mac: only the lid or the built-in keyboard could. Since 1.1, Tannlaus keeps Bluetooth on while the Mac sleeps docked.
+Tannlaus 1.0 turned Bluetooth off at every sleep. At a desk, with the lid closed next to a monitor (clamshell mode) or open beside it, that left a Bluetooth keyboard unable to wake the Mac: only the lid or the built-in keyboard could. Since 1.1, Tannlaus keeps Bluetooth on while a Mac laptop sleeps docked.
 
 ## The rule
 
 - **At sleep:** if Bluetooth is on and the Mac is docked, keep it on. Otherwise turn it off, as 1.0 does. Either way Bluetooth is recorded as on, so the wake restore and the undock rule still work.
-- **Docked** means at least one physical external display in the last *settled* display list: the list once it has been unchanged for 3 seconds. The built-in display, macOS's placeholder display and displays without a vendor ID don't count.
-- **While asleep:** every display change, power source change, lid change and system power message re-checks the dock. Docked makes sure Bluetooth is on; not docked turns it off. Changes are read back and retried a few times, then given up. Tannlaus holds a sleep assertion while switching and delays its system sleep acknowledgement until a running Bluetooth call has finished.
+- **Docked** means at least one physical external display in the last *settled* display list: the list once it has had no display change for 3 seconds. The built-in display, macOS's placeholder display and displays without a vendor ID don't count.
+- **Laptops only.** A desktop Mac (mini, Studio, Pro) always has a monitor, so it would always count as docked and Bluetooth would never go off. On a Mac without a built-in battery the rule is off and the menu item is hidden; it behaves as 1.0.
+- **While asleep:** every display change, power source change, lid change and system power message re-checks the dock. Display changes settle first; the other events read the display list again straight away unless a display change is settling, because an undock while asleep can arrive with no display event. Docked makes sure Bluetooth is on; not docked turns it off. Changes are read back and retried a few times, then given up.
+- **Staying awake for it:** while asleep and a display change is settling or a change is running, Tannlaus holds a sleep assertion, and it holds back its system sleep acknowledgement until both are done.
 - **On wake:** Bluetooth is restored only on NSWorkspace "did wake", never on the brief wakes that only system power reports.
 - **Setting:** "Keep Bluetooth on when docked" in the menu, on by default. When off, Tannlaus behaves exactly as 1.0.
 
@@ -18,7 +20,8 @@ Measured on 2026-11-16 on an Apple Silicon MacBook with macOS 27, a Dell U2717D 
 
 - **The display list flickers.** Connecting the monitor reported it added, removed 1.5 s later, then added again 0.9 s after that. On every wake it was removed and added back 0.6–1.2 s later. Hence the 3-second settle time.
 - **A placeholder display appears.** It has vendor 1970170734 (ASCII `unkn`) and model 1986622068 (`virt`), and `CGDisplayIsBuiltin` calls it external. It showed up for about 0.4 s during a wake, and after the monitor was unplugged with the lid closed it stayed listed for the whole sleep. Counting it made an undocked Mac look docked.
-- **Undocking triggers the sleep.** With the lid closed, unplugging charger and monitor reported both changes 0.2 s before will-sleep. The settled state at will-sleep still said docked, so Bluetooth stays on for 3 seconds, until the list settles. macOS took 30 s from will-sleep to sleep, so this happens before the Mac actually sleeps.
+- **Undocking triggers the sleep.** With the lid closed, unplugging charger and monitor reported both changes 0.2 s before will-sleep. The settled state at will-sleep still said docked, so Bluetooth stays on for 3 seconds, until the list settles; Tannlaus holds back its sleep acknowledgement until then, so the Mac can't sleep first.
+- **Undocking while asleep may only show up as power and lid messages** in a dark wake, with no display event. In every logged event the display list matched the last display event, so reading it then is as good as a settle.
 - **Closing the lid on a sleeping docked Mac fully wakes it.** NSWorkspace sent "did wake" and a new "will sleep" 0.14 s later, before the monitor was added back. Using the settled state, Tannlaus keeps Bluetooth on at that will-sleep, but macOS didn't list the monitor again before sleeping, so the list then settles as not docked and Bluetooth goes off. The result is 1.0's behaviour.
 - **Brief and dark wakes aren't wakes.** Plugging in a charger while asleep caused a 2–4 s wake with system power "will power on" and "has powered on", but no NSWorkspace "did wake". There were also dark wakes of 8–22 s (`wifibt`) about a second after sleep. Restoring on these would turn Bluetooth on in a bag.
 - **Power source notifications** fire about once a minute for battery level updates; only a change of source counts.
@@ -30,10 +33,10 @@ Measured on 2026-11-16 on an Apple Silicon MacBook with macOS 27, a Dell U2717D 
 
 ## Known limits
 
-- **Re-docking while asleep isn't seen with separate cables.** Plugging the charger back in wakes the Mac briefly, but the monitor isn't listed until a full wake, so Bluetooth stays off and you have to open the lid. A single-cable USB-C dock is untested; if macOS lists the monitor during that brief wake, the rule turns Bluetooth on.
+- **Re-docking while asleep isn't seen with separate cables.** Plugging the charger back in wakes the Mac briefly, but the monitor isn't listed until a full wake, so Bluetooth stays off and you have to open the lid. A single-cable USB-C dock is untested; if macOS lists the monitor during that brief wake, Tannlaus asks macOS to stay awake for the 3-second settle and then turns Bluetooth on.
 - **Closing the lid on a Mac already asleep at a desk** ends with Bluetooth off (see above).
 - **Some Bluetooth LE mice can't wake a Mac**, even with Bluetooth on. The HP 780M couldn't; the Bluetooth keyboard could.
-- **Sleep assertions are suggestions.** On battery, macOS may end a dark wake while Tannlaus is still switching. The change then finishes in the next wake.
+- **Sleep assertions are suggestions.** On battery, macOS may end a dark wake while Tannlaus is still settling or switching. The change then finishes in the next wake.
 - **Untested:** Sidecar, AirPlay and other virtual displays, and single-cable docks. Only displays with a vendor ID count, but a virtual display that reports one would count as docked.
 - **Display-only sleep** (a Hot Corner set to "Put Display to Sleep") isn't sleep; Tannlaus does nothing.
 

@@ -47,6 +47,9 @@ public protocol DockEnvironment: AnyObject {
 
     func powerSource() -> PowerSource
 
+    /// Whether this Mac is a laptop (it has a built-in battery). Must not fail open: if unknown, false.
+    func isLaptop() -> Bool
+
     /// Asks macOS not to sleep, including from a dark wake, until the result is cancelled.
     /// Returns `nil` if macOS refused.
     func preventSleep(reason: String) -> Cancellable?

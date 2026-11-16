@@ -10,16 +10,19 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let monitor: BluetoothMonitor
     /// False if this macOS version lacks the functions Tannlaus uses to switch Bluetooth.
     private let canControlBluetooth: Bool
+    /// Only laptops get "Keep Bluetooth on when docked"; a desktop always has a monitor.
+    private let showsDockSetting: Bool
     private var statusItem: NSStatusItem?
 
     /// Called after the user changes "Keep Bluetooth on when docked".
     var onKeepOnWhenDockedChange: ((Bool) -> Void)?
 
-    init(settings: Settings, loginItem: LoginItem, monitor: BluetoothMonitor, canControlBluetooth: Bool) {
+    init(settings: Settings, loginItem: LoginItem, monitor: BluetoothMonitor, canControlBluetooth: Bool, showsDockSetting: Bool) {
         self.settings = settings
         self.loginItem = loginItem
         self.monitor = monitor
         self.canControlBluetooth = canControlBluetooth
+        self.showsDockSetting = showsDockSetting
     }
 
     private var isAuthorized: Bool {
@@ -88,10 +91,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
         menu.addItem(.separator())
 
-        let docked = item("Keep Bluetooth on when docked", #selector(toggleKeepOnWhenDocked))
-        docked.state = settings.keepBluetoothOnWhenDocked ? .on : .off
-        docked.toolTip = "While the Mac sleeps with an external display connected, Bluetooth stays on so a Bluetooth keyboard can wake it."
-        menu.addItem(docked)
+        if showsDockSetting {
+            let docked = item("Keep Bluetooth on when docked", #selector(toggleKeepOnWhenDocked))
+            docked.state = settings.keepBluetoothOnWhenDocked ? .on : .off
+            docked.toolTip = "While the Mac sleeps with an external display connected, Bluetooth stays on so a Bluetooth keyboard can wake it."
+            menu.addItem(docked)
+        }
 
         let login = item(loginTitle, #selector(toggleLaunchAtLogin))
         switch loginItem.status {

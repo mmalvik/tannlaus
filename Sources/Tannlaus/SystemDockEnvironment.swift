@@ -28,6 +28,21 @@ final class SystemDockEnvironment: DockEnvironment {
         PowerSource(name: IOPSGetProvidingPowerSourceType(nil)?.takeUnretainedValue() as String?)
     }
 
+    /// A laptop has an internal battery among its power sources. If they can't be read, this
+    /// says no, so Tannlaus falls back to turning Bluetooth off at every sleep.
+    func isLaptop() -> Bool {
+        guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let sources = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef]
+        else {
+            logger.error("Could not read power sources; treating this Mac as a desktop")
+            return false
+        }
+        return sources.contains { source in
+            let description = IOPSGetPowerSourceDescription(info, source)?.takeUnretainedValue() as? [String: Any]
+            return description?[kIOPSTypeKey] as? String == kIOPSInternalBatteryType
+        }
+    }
+
     /// `NetworkClientActive` is the only public assertion that IOPMLib.h says keeps the Mac awake
     /// in a dark wake (on AC power; on battery macOS may still sleep). `PreventUserIdleSystemSleep`
     /// "has no effect if the system is in Dark Wake", and `PreventSystemSleep` is deprecated.

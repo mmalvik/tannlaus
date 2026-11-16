@@ -18,11 +18,15 @@ struct ScenarioTests {
         case displays([DisplayInfo])
         /// A display event with the list unchanged (the "flags 0x0" events at wake).
         case displaysTouched
+        /// The list changed but no display event came (an unplug while asleep, T10).
+        case displaysSilently([DisplayInfo])
         case systemWillSleep, systemWillPowerOn, systemHasPoweredOn
         /// NSWorkspace notifications.
         case willSleep, didWake
         /// Checks Bluetooth's power at this point.
         case expect(BluetoothPower)
+        /// Checks how many system sleep acknowledgements are still held back.
+        case expectUnacknowledged(Int)
     }
 
     let scheduler = FakeScheduler()
@@ -56,6 +60,7 @@ struct ScenarioTests {
                 environment.displays = displays
                 coordinator.handle(.displaysChanged)
             case .displaysTouched: coordinator.handle(.displaysChanged)
+            case .displaysSilently(let displays): environment.displays = displays
             case .systemWillSleep:
                 unacknowledged += 1
                 coordinator.handleSystemWillSleep { unacknowledged -= 1 }
@@ -65,6 +70,8 @@ struct ScenarioTests {
             case .didWake: coordinator.handleDidWake()
             case .expect(let power):
                 #expect(controller.power == power, "at \(time) s", sourceLocation: sourceLocation)
+            case .expectUnacknowledged(let count):
+                #expect(unacknowledged == count, "at \(time) s", sourceLocation: sourceLocation)
             }
         }
         scheduler.advance(by: .seconds(60))
@@ -237,7 +244,9 @@ struct ScenarioTests {
             (32.433, .systemWillSleep),
             (32.435, .willSleep),
             (32.436, .expect(.on)), // Not settled yet: the last settled state is docked.
+            (32.437, .expectUnacknowledged(1)), // So the Mac waits for the settle.
             (35.300, .expect(.off)), // Settled 3 s after the change: not docked.
+            (35.301, .expectUnacknowledged(0)),
             // T7: charger plugged in again while asleep. The monitor is never reported, so
             // Bluetooth stays off (known limit with separate cables).
             (163.260, .lid(closed: true)),
@@ -254,6 +263,35 @@ struct ScenarioTests {
             (188.647, .didWake),
             (188.648, .expect(.on)),
             (188.958, .displays([.dell, .builtIn])),
+        ])
+        #expect(controller.sets == [.off, .on])
+    }
+
+    @Test func t10UndockWhileAsleepWithoutDisplayEvent() {
+        // T10's unplug on its own, without T9 first: the monitor is still listed at sleep, and
+        // the dark wake reports only lid and power source changes. Timings from T9+T10.
+        replay(displays: [.builtIn], power: .battery, [
+            (0.000, .lid(closed: false)),
+            (0.027, .power(.ac)),
+            (4.548, .displays([.dell, .builtIn])),
+            (6.030, .displays([.builtIn])),
+            (6.935, .displays([.dell, .builtIn])),
+            (42.111, .systemWillSleep),
+            (42.118, .willSleep),
+            (42.119, .expect(.on)),
+            (72.829, .lid(closed: false)),
+            (100.000, .displaysSilently([.builtIn])), // Unplugged while asleep.
+            (121.209, .lid(closed: true)),
+            (121.210, .expect(.off)),
+            (124.804, .lid(closed: true)),
+            (124.810, .power(.battery)),
+            (124.811, .expect(.off)),
+            (192.037, .lid(closed: false)),
+            (192.079, .systemWillPowerOn),
+            (192.110, .displaysTouched),
+            (192.293, .systemHasPoweredOn),
+            (192.298, .didWake),
+            (192.299, .expect(.on)),
         ])
         #expect(controller.sets == [.off, .on])
     }

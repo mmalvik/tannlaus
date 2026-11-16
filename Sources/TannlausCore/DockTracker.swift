@@ -39,12 +39,30 @@ public final class DockTracker {
         logger.info("Displays at launch: \(self.settled.summary, privacy: .public); power: \(self.lastPowerSource.rawValue, privacy: .public)")
     }
 
+    /// Whether a display change is waiting to settle.
+    var isSettling: Bool {
+        pendingSettle != nil
+    }
+
     /// Restarts the settle timer. The settled state is unchanged until the list is quiet.
     func displaysChanged() {
         pendingSettle?.cancel()
         pendingSettle = scheduler.schedule(after: settleDelay) { [weak self] in
             self?.settle()
         }
+    }
+
+    /// Reads the list again after a lid, power or system power event, unless a display change is
+    /// still settling. With no display event for `settleDelay`, the list is quiet, so it counts
+    /// as settled at once.
+    ///
+    /// Measured on macOS 27: an undock while asleep may be reported only by the power source and
+    /// lid callbacks in a dark wake of about 8 s, with no display callback (T10), and the list
+    /// changed exactly when a display callback arrived, never between callbacks. So reading it
+    /// here is as safe as a settle, and fast enough to act within that dark wake.
+    func refreshIfQuiet() {
+        guard pendingSettle == nil else { return }
+        update(to: DockSnapshot(displays: environment.onlineDisplays()))
     }
 
     /// Whether the providing power source changed since the last call. Battery level updates
@@ -59,11 +77,14 @@ public final class DockTracker {
 
     private func settle() {
         pendingSettle = nil
-        let snapshot = DockSnapshot(displays: environment.onlineDisplays())
+        update(to: DockSnapshot(displays: environment.onlineDisplays()))
+        onSettled?()
+    }
+
+    private func update(to snapshot: DockSnapshot) {
         if snapshot.isDocked != settled.isDocked {
             logger.info("Displays settled, now \(snapshot.summary, privacy: .public)")
         }
         settled = snapshot
-        onSettled?()
     }
 }
