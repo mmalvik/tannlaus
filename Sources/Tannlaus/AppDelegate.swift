@@ -8,6 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let monitor = BluetoothMonitor()
     private var coordinator: PowerCoordinator?
     private var statusMenu: StatusMenu?
+    /// SPIKE: logs lid, display and power state for 1.1 planning. Changes nothing.
+    private var dockDiagnostics: DockDiagnostics?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
@@ -27,19 +29,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitor.start()
         statusMenu.update()
 
+        let monitor = monitor
+        let dockDiagnostics = DockDiagnostics(bluetoothIsOn: { monitor.isPoweredOn })
+        self.dockDiagnostics = dockDiagnostics
+        dockDiagnostics.start()
+
         // The sleep handler must finish its work before returning, so the Mac can't sleep first.
         let center = NSWorkspace.shared.notificationCenter
         center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
+                self?.dockDiagnostics?.willSleep()
                 self?.coordinator?.handleWillSleep()
                 self?.statusMenu?.update()
+                self?.dockDiagnostics?.sleepHandlerFinished()
             }
         }
         center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
+                self?.dockDiagnostics?.didWake()
                 self?.coordinator?.handleDidWake()
                 self?.statusMenu?.update()
             }
+        }
+        center.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.dockDiagnostics?.screensDidSleep() }
+        }
+        center.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.dockDiagnostics?.screensDidWake() }
         }
     }
 
