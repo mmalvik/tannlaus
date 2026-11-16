@@ -12,10 +12,14 @@ Tannlaus is a clean-room rewrite inspired by Bluesnooze (MIT). Never copy upstre
 
 Ask before changing any of these.
 
-- On sleep, record whether Bluetooth is on, then turn it off. The sleep handler finishes the change and reads it back before returning, so the Mac can't sleep first.
-- On wake, turn Bluetooth on only if it was on before sleep. If no sleep was recorded, change nothing.
+- On sleep, record whether Bluetooth is on. If it is on and the Mac is docked, keep it on; otherwise turn it off. Either way it is recorded as on. The sleep handler finishes any change and reads it back before returning, so the Mac can't sleep first.
+- Docked means at least one physical external display in the last *settled* display list (unchanged for a few seconds), never the list at that instant. macOS's placeholder display (vendor `unkn`, model `virt`) never counts. Don't use `AppleClamshellCausesSleep`. The measurements behind this are in `docs/clamshell.md`.
+- While asleep with Bluetooth recorded as on, re-check docked on every display change, power source change (a change of source, not a battery level update), lid change and system power message: docked makes sure Bluetooth is on, not docked turns it off. Hold a sleep assertion while switching, and acknowledge system power "will sleep" only once a running Bluetooth call has finished.
+- On wake, turn Bluetooth on only if it was on before sleep, and only on NSWorkspace "did wake". Brief and dark wakes that only system power reports (a charger plugged in) re-check the dock and never restore Bluetooth. If no sleep was recorded, change nothing.
+- "Keep Bluetooth on when docked" is on by default. When it is off, sleep and wake behave exactly as in 1.0: always off at sleep, no re-checks while asleep.
+- Decisions live in `TannlausCore` behind `BluetoothController` and `DockEnvironment`; the IOKit, CoreGraphics and AppKit adapters in `Sources/Tannlaus` stay free of logic.
 - Launching the app never changes Bluetooth.
-- After every change, read the state back and retry a few times with backoff, then give up and log it. Never loop. A new sleep or wake cancels pending retries.
+- After every change, read the state back and retry a few times with backoff, then give up and log it. Never loop. A new sleep, a wake or a newer dock decision cancels pending retries.
 - Shutdown and logout are not handled: the off state would survive the restart.
 - Never call the private IOBluetooth functions without Bluetooth permission (`CBManager.authorization`). Ask for permission at launch, never at sleep. Without permission, skip sleep and wake, show "Bluetooth access denied" in the menu, and show the icon even if it is hidden.
 - Private calls run off the main thread with a timeout, and new calls are refused while one is stuck. The reasons are in `SystemBluetoothController.swift`.
@@ -29,7 +33,7 @@ Ask before changing any of these.
 - `make test` — run unit tests
 - `make app` — assemble and ad-hoc sign `Tannlaus.app` for local testing
 
-Always run `make build` and `make test` before declaring a task done. Unit tests can't cover sleep, permission dialogs or installing; tell the user which checks in `docs/testing.md` a change needs.
+Always run `make build` and `make test` before declaring a task done. Logic changes need unit tests, and changes to sleep, wake or dock handling need a replayed scenario in `ScenarioTests.swift`. Unit tests can't cover real sleep, permission dialogs or installing; tell the user which checks in `docs/testing.md` a change needs.
 
 ## Changelog (required)
 

@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let logger = Logger(category: "app")
     private let monitor = BluetoothMonitor()
     private var coordinator: PowerCoordinator?
+    private var dockEvents: DockEvents?
     private var statusMenu: StatusMenu?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -15,17 +16,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Launching never changes Bluetooth.
         let controller = SystemBluetoothController()
-        coordinator = PowerCoordinator(controller: controller, scheduler: TaskScheduler())
+        let settings = Settings()
+        let coordinator = PowerCoordinator(
+            controller: controller,
+            scheduler: TaskScheduler(),
+            environment: SystemDockEnvironment(),
+            keepOnWhenDocked: settings.keepBluetoothOnWhenDocked
+        )
+        self.coordinator = coordinator
         let statusMenu = StatusMenu(
-            settings: Settings(),
+            settings: settings,
             loginItem: LoginItem(),
             monitor: monitor,
             canControlBluetooth: controller.isAvailable
         )
         self.statusMenu = statusMenu
+        statusMenu.onKeepOnWhenDockedChange = { [weak coordinator, logger] enabled in
+            logger.info("Keep Bluetooth on when docked: \(enabled ? "on" : "off", privacy: .public)")
+            coordinator?.keepOnWhenDocked = enabled
+        }
         monitor.onChange = { [weak statusMenu] in statusMenu?.update() }
         monitor.start()
         statusMenu.update()
+
+        // Display, power, lid and system power changes, to keep or turn off Bluetooth while docked.
+        let dockEvents = DockEvents(
+            onEvent: { [weak coordinator] event in coordinator?.handle(event) },
+            onSystemWillSleep: { [weak coordinator] acknowledge in
+                if let coordinator {
+                    coordinator.handleSystemWillSleep(acknowledge: acknowledge)
+                } else {
+                    acknowledge()
+                }
+            }
+        )
+        self.dockEvents = dockEvents
+        dockEvents.start()
 
         // The sleep handler must finish its work before returning, so the Mac can't sleep first.
         let center = NSWorkspace.shared.notificationCenter

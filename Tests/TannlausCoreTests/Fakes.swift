@@ -47,11 +47,14 @@ final class FakeBluetoothController: BluetoothController, @unchecked Sendable {
 final class FakeScheduler: Scheduler {
     final class Item: Cancellable {
         let delay: Duration
+        /// When the item is due on the fake clock.
+        let due: Duration
         let work: @MainActor () -> Void
         private(set) var isCancelled = false
 
-        init(delay: Duration, work: @escaping @MainActor () -> Void) {
+        init(delay: Duration, due: Duration, work: @escaping @MainActor () -> Void) {
             self.delay = delay
+            self.due = due
             self.work = work
         }
 
@@ -61,6 +64,8 @@ final class FakeScheduler: Scheduler {
     }
 
     private(set) var items: [Item] = []
+    /// The fake clock, moved only by `advance(to:)` and `advance(by:)`.
+    private(set) var now: Duration = .zero
     private(set) var pauses: [Duration] = []
     /// Called on every pause, to change state between attempts in the sleep handler.
     var onPause: (() -> Void)?
@@ -69,7 +74,7 @@ final class FakeScheduler: Scheduler {
     private var undelivered: [@MainActor () -> Void] = []
 
     func schedule(after delay: Duration, _ work: @escaping @MainActor () -> Void) -> Cancellable {
-        let item = Item(delay: delay, work: work)
+        let item = Item(delay: delay, due: now + delay, work: work)
         items.append(item)
         return item
     }
@@ -125,4 +130,66 @@ final class FakeScheduler: Scheduler {
     func runAll() {
         while runNext() {}
     }
+
+    /// Moves the clock forward, running each pending item when it falls due, earliest first.
+    func advance(to time: Duration) {
+        precondition(time >= now, "The fake clock only moves forward")
+        while let item = items.filter({ !$0.isCancelled && $0.due <= time }).min(by: { $0.due < $1.due }) {
+            items.removeAll { $0 === item }
+            now = item.due
+            item.work()
+        }
+        now = time
+    }
+
+    func advance(by delay: Duration) {
+        advance(to: now + delay)
+    }
+}
+
+/// Displays and power source set by the test. Counts the sleep assertions it hands out.
+@MainActor
+final class FakeDockEnvironment: DockEnvironment {
+    final class Assertion: Cancellable {
+        private(set) var isReleased = false
+
+        func cancel() {
+            isReleased = true
+        }
+    }
+
+    var displays: [DisplayInfo]
+    var source: PowerSource
+    private(set) var assertions: [Assertion] = []
+
+    init(displays: [DisplayInfo] = [.builtIn], source: PowerSource = .battery) {
+        self.displays = displays
+        self.source = source
+    }
+
+    func onlineDisplays() -> [DisplayInfo] {
+        displays
+    }
+
+    func powerSource() -> PowerSource {
+        source
+    }
+
+    func preventSleep(reason: String) -> Cancellable? {
+        let assertion = Assertion()
+        assertions.append(assertion)
+        return assertion
+    }
+
+    /// Sleep assertions taken and not yet released.
+    var heldAssertions: Int {
+        assertions.filter { !$0.isReleased }.count
+    }
+}
+
+/// Displays as recorded on the spike MacBook (macOS 27, 2026-11-16).
+extension DisplayInfo {
+    static let builtIn = DisplayInfo(vendor: 1552, model: 41041, isBuiltin: true)
+    static let dell = DisplayInfo(vendor: 4268, model: 16619, isBuiltin: false) // DELL U2717D
+    static let placeholder = DisplayInfo(vendor: 1970170734, model: 1986622068, isBuiltin: false) // "unkn"/"virt"
 }

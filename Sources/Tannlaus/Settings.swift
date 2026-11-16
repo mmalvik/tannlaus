@@ -12,4 +12,10 @@ struct Settings {
         get { defaults.bool(forKey: "hideIcon") }
         nonmutating set { defaults.set(newValue, forKey: "hideIcon") }
     }
+
+    /// "Keep Bluetooth on when docked". On unless the user turned it off.
+    var keepBluetoothOnWhenDocked: Bool {
+        get { defaults.object(forKey: "keepBluetoothOnWhenDocked") as? Bool ?? true }
+        nonmutating set { defaults.set(newValue, forKey: "keepBluetoothOnWhenDocked") }
+    }
 }
