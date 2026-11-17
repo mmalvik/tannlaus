@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-17
+
 ### Added
 
 - Bluetooth stays on while your Mac laptop sleeps docked to an external display, lid open or closed, so a Bluetooth keyboard can wake it. Unplugging the display while the Mac sleeps turns Bluetooth off.
