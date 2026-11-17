@@ -5,8 +5,11 @@ import TannlausCore
 struct PowerCoordinatorTests {
     let scheduler = FakeScheduler()
 
+    /// Not docked, so these tests also check that sleep and wake behave as in 1.0 without a monitor.
+    let environment = FakeDockEnvironment()
+
     func makeCoordinator(_ controller: FakeBluetoothController) -> PowerCoordinator {
-        PowerCoordinator(controller: controller, scheduler: scheduler)
+        PowerCoordinator(controller: controller, scheduler: scheduler, environment: environment)
     }
 
     // MARK: Sleep and wake

@@ -2,7 +2,7 @@ import AppKit
 import ServiceManagement
 import TannlausCore
 
-/// The menu bar icon and its menu: status, Launch at login, Hide icon and Quit.
+/// The menu bar icon and its menu: status, Keep Bluetooth on when docked, Launch at login, Hide icon and Quit.
 @MainActor
 final class StatusMenu: NSObject, NSMenuDelegate {
     private let settings: Settings
@@ -10,13 +10,19 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let monitor: BluetoothMonitor
     /// False if this macOS version lacks the functions Tannlaus uses to switch Bluetooth.
     private let canControlBluetooth: Bool
+    /// Only laptops get "Keep Bluetooth on when docked"; a desktop always has a monitor.
+    private let showsDockSetting: Bool
     private var statusItem: NSStatusItem?
 
-    init(settings: Settings, loginItem: LoginItem, monitor: BluetoothMonitor, canControlBluetooth: Bool) {
+    /// Called after the user changes "Keep Bluetooth on when docked".
+    var onKeepOnWhenDockedChange: ((Bool) -> Void)?
+
+    init(settings: Settings, loginItem: LoginItem, monitor: BluetoothMonitor, canControlBluetooth: Bool, showsDockSetting: Bool) {
         self.settings = settings
         self.loginItem = loginItem
         self.monitor = monitor
         self.canControlBluetooth = canControlBluetooth
+        self.showsDockSetting = showsDockSetting
     }
 
     private var isAuthorized: Bool {
@@ -85,6 +91,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
         menu.addItem(.separator())
 
+        if showsDockSetting {
+            let docked = item("Keep Bluetooth on when docked", #selector(toggleKeepOnWhenDocked))
+            docked.state = settings.keepBluetoothOnWhenDocked ? .on : .off
+            docked.toolTip = "While the Mac sleeps with an external display connected, Bluetooth stays on so a Bluetooth keyboard can wake it."
+            menu.addItem(docked)
+        }
+
         let login = item(loginTitle, #selector(toggleLaunchAtLogin))
         switch loginItem.status {
         case .enabled: login.state = .on
@@ -133,6 +146,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Bluetooth") {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    @objc private func toggleKeepOnWhenDocked() {
+        settings.keepBluetoothOnWhenDocked.toggle()
+        onKeepOnWhenDockedChange?(settings.keepBluetoothOnWhenDocked)
     }
 
     @objc private func toggleLaunchAtLogin() {

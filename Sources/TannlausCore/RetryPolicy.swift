@@ -13,4 +13,8 @@ public struct RetryPolicy: Sendable, Equatable {
 
     /// Restoring Bluetooth on wake. Three retries spread over about ten seconds.
     public static let wake = RetryPolicy(delays: [.seconds(1), .seconds(3), .seconds(6)])
+
+    /// Switching Bluetooth while the Mac sleeps, after it was docked or undocked. This usually
+    /// happens inside a dark wake, which lasted 8–22 s when measured, so the retries fit in one.
+    public static let dock = RetryPolicy(delays: [.seconds(1), .seconds(3)])
 }
