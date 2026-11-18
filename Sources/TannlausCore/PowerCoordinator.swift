@@ -161,7 +161,7 @@ public final class PowerCoordinator {
         dockTarget = target
         if dockRuleApplies {
             let action = target == .on && current == .on ? "keeping Bluetooth on" : "turning Bluetooth \(target.rawValue)"
-            logDockDecision(at: "will sleep", action: action, changes: true)
+            logDockDecision(at: "will sleep", action: action, persist: true)
         }
         guard current != target else { return }
         switchBeforeSleep(to: target)
@@ -242,7 +242,7 @@ public final class PowerCoordinator {
         guard target != dockTarget else {
             // Already there, already switching, or gave up: never start again for the same answer.
             let action = work == nil ? "Bluetooth stays \(target.rawValue)" : "already turning Bluetooth \(target.rawValue)"
-            logDockDecision(at: event, action: action, changes: false)
+            logDockDecision(at: event, action: action, persist: false)
             return
         }
         guard immediately else {
@@ -256,16 +256,17 @@ public final class PowerCoordinator {
             }
             return
         }
-        logDockDecision(at: event, action: "turning Bluetooth \(target.rawValue)", changes: true)
+        logDockDecision(at: event, action: "turning Bluetooth \(target.rawValue)", persist: true)
         interruptWork()
         dockTarget = target
         runInBackground(.dock(target), attempt: 0)
     }
 
-    /// One line per dock decision, for bug reports. Decisions that change something are kept on
-    /// disk (notice); the many that change nothing, from repeated lid and power messages, are info.
-    private func logDockDecision(at event: String, action: String, changes: Bool) {
-        let level: OSLogType = changes ? .default : .info
+    /// One line per dock decision, for bug reports. The decision at each sleep, even "keeping
+    /// Bluetooth on", and every later one that changes Bluetooth are kept on disk (notice); the
+    /// many re-checks that change nothing, from repeated lid and power messages, are info.
+    private func logDockDecision(at event: String, action: String, persist: Bool) {
+        let level: OSLogType = persist ? .default : .info
         logger.log(level: level, "Dock check (\(event, privacy: .public)): \(self.dock.settled.summary, privacy: .public); \(action, privacy: .public)")
     }
 
