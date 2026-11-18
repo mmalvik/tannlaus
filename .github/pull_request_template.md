@@ -6,7 +6,7 @@
 
 - [ ] User-visible change: entry under `## [Unreleased]` in `CHANGELOG.md`. Otherwise: the `skip-changelog` label.
 - [ ] `make build` and `make test` pass.
-- [ ] Logic changes have unit tests; sleep, wake or dock changes have a replayed scenario in `ScenarioTests.swift`.
+- [ ] Logic changes have unit tests; sleep, wake or dock changes have a replayed scenario in `ScenarioTests.swift` and are reflected in `docs/clamshell.md`.
 
 ## Manual checks
 
