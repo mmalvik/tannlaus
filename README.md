@@ -49,7 +49,13 @@ Bluetooth is named after the Danish king Harald Blåtann ("Bluetooth"). In Norwe
 
 ## Troubleshooting
 
-Tannlaus logs every sleep, wake and Bluetooth change, and one "Dock check" line for each docked decision. In Console.app, filter on subsystem `com.tannlaus.app`, or run:
+Tannlaus logs every sleep, wake and Bluetooth change, and one "Dock check" line for each docked decision that changes something. macOS keeps these in the system log, so after a problem you can still read them. In Console.app, filter on subsystem `com.tannlaus.app`, or run:
+
+```
+log show --predicate 'subsystem == "com.tannlaus.app"' --last 1h
+```
+
+Change `1h` to cover when it happened. To also see the repeated dock checks that change nothing, follow the log live with `--level info` while you reproduce the problem:
 
 ```
 log stream --predicate 'subsystem == "com.tannlaus.app"' --level info

@@ -25,6 +25,8 @@ Build and open a local copy with `make app && open build/Tannlaus.app`, and foll
 log stream --predicate 'subsystem == "com.tannlaus.app"' --level info
 ```
 
+`--level info` adds the lines that can repeat many times per sleep (power and lid repeats, dock checks that change nothing). Every sleep, wake, Bluetooth change and dock decision that changes something is logged at notice level and stays in the system log, so `log show --predicate 'subsystem == "com.tannlaus.app"' --last 10m` finds it afterwards without `--info`.
+
 Run the relevant checks for a change, and all of them before a release.
 
 ### Sleep

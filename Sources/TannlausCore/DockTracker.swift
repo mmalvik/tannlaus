@@ -36,7 +36,7 @@ public final class DockTracker {
         self.settleDelay = settleDelay
         settled = DockSnapshot(displays: environment.onlineDisplays())
         lastPowerSource = environment.powerSource()
-        logger.info("Displays at launch: \(self.settled.summary, privacy: .public); power: \(self.lastPowerSource ?? "unknown", privacy: .public)")
+        logger.notice("Displays at launch: \(self.settled.summary, privacy: .public); power: \(self.lastPowerSource ?? "unknown", privacy: .public)")
     }
 
     /// Whether a display change is waiting to settle.

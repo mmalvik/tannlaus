@@ -17,7 +17,7 @@ final class BluetoothMonitor: NSObject, CBCentralManagerDelegate {
     /// Creating the manager shows the permission prompt if the user hasn't answered yet.
     /// It is kept for the app's lifetime to receive authorization changes.
     func start() {
-        logger.info("Bluetooth authorization at launch: \(CBManager.authorization.rawValue)")
+        logger.notice("Bluetooth authorization at launch: \(CBManager.authorization.rawValue)")
         central = CBCentralManager(delegate: self, queue: .main, options: [CBCentralManagerOptionShowPowerAlertKey: false])
     }
 
@@ -29,7 +29,7 @@ final class BluetoothMonitor: NSObject, CBCentralManagerDelegate {
             case .poweredOff: isPoweredOn = false
             default: isPoweredOn = nil
             }
-            logger.info("Bluetooth state changed: \(state.rawValue), authorization: \(CBManager.authorization.rawValue)")
+            logger.notice("Bluetooth state changed: \(state.rawValue), authorization: \(CBManager.authorization.rawValue)")
             onChange?()
         }
     }
