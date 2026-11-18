@@ -1,0 +1,48 @@
+name: Feature request
+description: Suggest a change to what Tannlaus does.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tannlaus aims to stay small: it turns Bluetooth off when the Mac sleeps and back on when it wakes. It has no network access, analytics or in-app updater, and that won't change.
+
+  - type: input
+    id: version
+    attributes:
+      label: Tannlaus version
+      description: In Finder, select Tannlaus in Applications and choose File > Get Info.
+      placeholder: "1.1.0"
+    validations:
+      required: false
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you're trying to do, and where Tannlaus gets in the way or falls short.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like
+      description: How you'd like Tannlaus to behave.
+    validations:
+      required: true
+
+  - type: textarea
+    id: setup
+    attributes:
+      label: Your setup
+      description: Mac model (laptop or desktop), macOS version, external displays and Bluetooth devices, if they matter here.
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've tried
+    validations:
+      required: false

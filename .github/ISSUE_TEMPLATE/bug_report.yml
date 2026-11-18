@@ -1,0 +1,142 @@
+name: Bug report
+description: Bluetooth didn't do what you expected around sleep or wake, or the app misbehaves.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please check [Known limitations](https://github.com/mmalvik/tannlaus#known-limitations) first: some sleep and wake behaviour comes from macOS and can't be fixed in Tannlaus.
+
+  - type: input
+    id: version
+    attributes:
+      label: Tannlaus version
+      description: In Finder, select Tannlaus in Applications and choose File > Get Info, or run `defaults read /Applications/Tannlaus.app/Contents/Info CFBundleShortVersionString`.
+      placeholder: "1.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      description: Apple menu > About This Mac, or run `sw_vers`.
+      placeholder: "macOS 26.1 (25B78)"
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Mac model
+      description: Apple menu > About This Mac.
+      placeholder: "MacBook Pro 14-inch, M3 Pro, 2023"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Laptop or desktop
+      options:
+        - Laptop (MacBook)
+        - Desktop (Mac mini, iMac, Mac Studio, Mac Pro)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: Install method
+      options:
+        - Homebrew
+        - dmg from GitHub releases
+        - Built from source
+    validations:
+      required: true
+
+  - type: dropdown
+    id: permission
+    attributes:
+      label: Bluetooth permission
+      description: System Settings > Privacy & Security > Bluetooth. Without it, the Tannlaus menu shows "Bluetooth access denied".
+      options:
+        - Granted
+        - Denied
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: lid
+    attributes:
+      label: Lid when the Mac went to sleep
+      options:
+        - Open
+        - Closed
+        - Desktop Mac (no lid)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: display
+    attributes:
+      label: External display
+      options:
+        - None
+        - Through a single-cable dock or hub (display and power on one cable)
+        - Separate cables for display and power
+        - Display only, no charger
+    validations:
+      required: true
+
+  - type: dropdown
+    id: docked-setting
+    attributes:
+      label: '"Keep Bluetooth on when docked" setting'
+      description: In the Tannlaus menu. Desktop Macs don't have it.
+      options:
+        - "On"
+        - "Off"
+        - Not in the menu (desktop Mac)
+    validations:
+      required: true
+
+  - type: textarea
+    id: setup-details
+    attributes:
+      label: Other setup details
+      description: Bluetooth devices involved (keyboard, mouse, headphones), how the Mac went to sleep (lid, Apple menu, idle), and anything changed while it slept (cables, lid).
+    validations:
+      required: false
+
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: Include the steps that lead to it, and the time if you can, so it can be found in the logs.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (if possible)
+      description: |
+        Logs are the most useful part of a report. Run this in Terminal soon after the problem (raise `1h` if it happened earlier) and paste the output:
+
+        ```
+        log show --predicate 'subsystem == "com.tannlaus.app"' --last 1h --info
+        ```
+
+        Look it over before posting and remove anything you'd rather not share.
+      render: text
+    validations:
+      required: false

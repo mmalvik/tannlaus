@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Known limitations
+    url: https://github.com/mmalvik/tannlaus#known-limitations
+    about: Behaviour that comes from macOS and can't be fixed in Tannlaus.
+  - name: Troubleshooting
+    url: https://github.com/mmalvik/tannlaus#troubleshooting
+    about: How to follow the Tannlaus logs.
