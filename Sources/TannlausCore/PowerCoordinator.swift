@@ -99,7 +99,7 @@ public final class PowerCoordinator {
             self?.displaysSettled()
         }
         if !isLaptop {
-            logger.info("Not a laptop: Bluetooth goes off at every sleep, docked or not")
+            logger.notice("Not a laptop: Bluetooth goes off at every sleep, docked or not")
         }
     }
 
@@ -121,14 +121,14 @@ public final class PowerCoordinator {
     // MARK: Sleep and wake (NSWorkspace)
 
     public func handleWillSleep() {
-        logger.info("Will sleep")
+        logger.notice("Will sleep")
         // A display change still settling (an undock right before sleep) needs the Mac awake.
         defer { updateSleepHold() }
         if interruptWork() == .restore, wasOnBeforeSleep == nil {
             // A wake restore was still in progress, so the user's Bluetooth was on. Record it even
             // without access, so the next wake still restores it.
             wasOnBeforeSleep = true
-            logger.info("Wake restore was still in progress, recording Bluetooth as on")
+            logger.notice("Wake restore was still in progress, recording Bluetooth as on")
         }
         // A restore call still running in the background could otherwise land after the change below.
         scheduler.waitForBackgroundWork()
@@ -138,13 +138,13 @@ public final class PowerCoordinator {
         var current: BluetoothPower?
         if let wasOn = wasOnBeforeSleep {
             // A second sleep without a wake in between, or an interrupted restore: keep what was recorded.
-            logger.info("Bluetooth already recorded as \(wasOn ? "on" : "off", privacy: .public) before sleep, keeping it")
+            logger.notice("Bluetooth already recorded as \(wasOn ? "on" : "off", privacy: .public) before sleep, keeping it")
         } else {
             do {
                 let state = try controller.powerState()
                 wasOnBeforeSleep = state == .on
                 current = state
-                logger.info("Bluetooth is \(state.rawValue, privacy: .public) before sleep")
+                logger.notice("Bluetooth is \(state.rawValue, privacy: .public) before sleep")
             } catch {
                 logger.error("Could not read Bluetooth state before sleep: \(String(describing: error), privacy: .public). Leaving Bluetooth unchanged")
                 return
@@ -152,7 +152,7 @@ public final class PowerCoordinator {
         }
 
         guard wasOnBeforeSleep == true else {
-            logger.info("Bluetooth was off before sleep, leaving it off")
+            logger.notice("Bluetooth was off before sleep, leaving it off")
             return
         }
 
@@ -161,14 +161,14 @@ public final class PowerCoordinator {
         dockTarget = target
         if dockRuleApplies {
             let action = target == .on && current == .on ? "keeping Bluetooth on" : "turning Bluetooth \(target.rawValue)"
-            logDockDecision(at: "will sleep", action: action, changes: true)
+            logDockDecision(at: "will sleep", action: action, persist: true)
         }
         guard current != target else { return }
         switchBeforeSleep(to: target)
     }
 
     public func handleDidWake() {
-        logger.info("Did wake")
+        logger.notice("Did wake")
         defer { updateSleepHold() }
         let interrupted = interruptWork()
         dockTarget = nil
@@ -179,15 +179,15 @@ public final class PowerCoordinator {
         } else if interrupted == .restore {
             // A second wake while a restore was still in progress: start the restore again.
             wasOn = true
-            logger.info("Wake restore was still in progress, restarting it")
+            logger.notice("Wake restore was still in progress, restarting it")
         } else {
-            logger.info("No sleep recorded, leaving Bluetooth unchanged")
+            logger.notice("No sleep recorded, leaving Bluetooth unchanged")
             return
         }
         wasOnBeforeSleep = nil
 
         guard wasOn else {
-            logger.info("Bluetooth was off before sleep, leaving it off")
+            logger.notice("Bluetooth was off before sleep, leaving it off")
             return
         }
         guard isAuthorized(for: "wake") else { return }
@@ -242,7 +242,7 @@ public final class PowerCoordinator {
         guard target != dockTarget else {
             // Already there, already switching, or gave up: never start again for the same answer.
             let action = work == nil ? "Bluetooth stays \(target.rawValue)" : "already turning Bluetooth \(target.rawValue)"
-            logDockDecision(at: event, action: action, changes: false)
+            logDockDecision(at: event, action: action, persist: false)
             return
         }
         guard immediately else {
@@ -256,16 +256,17 @@ public final class PowerCoordinator {
             }
             return
         }
-        logDockDecision(at: event, action: "turning Bluetooth \(target.rawValue)", changes: true)
+        logDockDecision(at: event, action: "turning Bluetooth \(target.rawValue)", persist: true)
         interruptWork()
         dockTarget = target
         runInBackground(.dock(target), attempt: 0)
     }
 
-    /// One line per dock decision, for bug reports. Decisions that change something are kept on
-    /// disk (notice); the many that change nothing, from repeated lid and power messages, are info.
-    private func logDockDecision(at event: String, action: String, changes: Bool) {
-        let level: OSLogType = changes ? .default : .info
+    /// One line per dock decision, for bug reports. The decision at each sleep, even "keeping
+    /// Bluetooth on", and every later one that changes Bluetooth are kept on disk (notice); the
+    /// many re-checks that change nothing, from repeated lid and power messages, are info.
+    private func logDockDecision(at event: String, action: String, persist: Bool) {
+        let level: OSLogType = persist ? .default : .info
         logger.log(level: level, "Dock check (\(event, privacy: .public)): \(self.dock.settled.summary, privacy: .public); \(action, privacy: .public)")
     }
 
@@ -317,7 +318,7 @@ public final class PowerCoordinator {
         for attempt in 0...sleepPolicy.delays.count {
             if attempt > 0 {
                 let delay = sleepPolicy.delays[attempt - 1]
-                logger.info("Retrying in \(String(describing: delay), privacy: .public)")
+                logger.notice("Retrying in \(String(describing: delay), privacy: .public)")
                 scheduler.pause(for: delay)
                 guard isAuthorized(for: "retry") else { return }
             }
@@ -368,7 +369,7 @@ public final class PowerCoordinator {
             return
         }
         let delay = policy.delays[attempt]
-        logger.info("Retrying in \(String(describing: delay), privacy: .public)")
+        logger.notice("Retrying in \(String(describing: delay), privacy: .public)")
         pendingRetry = scheduler.schedule(after: delay) { [weak self] in
             self?.runInBackground(work, attempt: attempt + 1)
             self?.updateSleepHold()
@@ -387,8 +388,8 @@ public final class PowerCoordinator {
         guard let work else { return nil }
         self.work = nil
         switch work {
-        case .restore: logger.info("Interrupted the wake restore in progress")
-        case .dock(let target): logger.info("Interrupted turning Bluetooth \(target.rawValue, privacy: .public) for the dock")
+        case .restore: logger.notice("Interrupted the wake restore in progress")
+        case .dock(let target): logger.notice("Interrupted turning Bluetooth \(target.rawValue, privacy: .public) for the dock")
         }
         return work
     }
@@ -400,11 +401,11 @@ public final class PowerCoordinator {
         controller: BluetoothController,
         logger: Logger
     ) -> Bool {
-        logger.info("Turning Bluetooth \(target.rawValue, privacy: .public) (attempt \(number + 1))")
+        logger.notice("Turning Bluetooth \(target.rawValue, privacy: .public) (attempt \(number + 1))")
         do {
             let state = try controller.setPower(target)
             if state == target {
-                logger.info("Read back: Bluetooth is \(state.rawValue, privacy: .public)")
+                logger.notice("Read back: Bluetooth is \(state.rawValue, privacy: .public)")
                 return true
             }
             logger.error("Read back: Bluetooth is \(state.rawValue, privacy: .public), expected \(target.rawValue, privacy: .public)")

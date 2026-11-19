@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-19
+
+### Changed
+
+- Sleep, wake and Bluetooth changes now stay in the system log, so `log show` can find them after a problem instead of only while you watch with `log stream`.
+
 ## [1.1.0] - 2026-11-17
 
 ### Added

@@ -12,7 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
-        logger.info("Tannlaus \(version, privacy: .public) launched")
+        logger.notice("Tannlaus \(version, privacy: .public) launched")
 
         // Launching never changes Bluetooth.
         let controller = SystemBluetoothController()
@@ -33,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         self.statusMenu = statusMenu
         statusMenu.onKeepOnWhenDockedChange = { [weak coordinator, logger] enabled in
-            logger.info("Keep Bluetooth on when docked: \(enabled ? "on" : "off", privacy: .public)")
+            logger.notice("Keep Bluetooth on when docked: \(enabled ? "on" : "off", privacy: .public)")
             coordinator?.keepOnWhenDocked = enabled
         }
         monitor.onChange = { [weak statusMenu] in statusMenu?.update() }
@@ -72,12 +72,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Opening the app again while it runs brings a hidden icon back.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        logger.info("Reopened; showing the menu bar icon")
+        logger.notice("Reopened; showing the menu bar icon")
         statusMenu?.showIcon()
         return false
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        logger.info("Tannlaus quitting")
+        logger.notice("Tannlaus quitting")
     }
 }

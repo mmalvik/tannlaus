@@ -36,7 +36,7 @@ public final class DockTracker {
         self.settleDelay = settleDelay
         settled = DockSnapshot(displays: environment.onlineDisplays())
         lastPowerSource = environment.powerSource()
-        logger.info("Displays at launch: \(self.settled.summary, privacy: .public); power: \(self.lastPowerSource ?? "unknown", privacy: .public)")
+        logger.notice("Displays at launch: \(self.settled.summary, privacy: .public); power: \(self.lastPowerSource ?? "unknown", privacy: .public)")
     }
 
     /// Whether a display change is waiting to settle.
@@ -70,7 +70,7 @@ public final class DockTracker {
     func powerSourceUpdated() -> Bool {
         let source = environment.powerSource()
         guard source != lastPowerSource else { return false }
-        logger.info("Power source changed from \(self.lastPowerSource ?? "unknown", privacy: .public) to \(source ?? "unknown", privacy: .public)")
+        logger.notice("Power source changed from \(self.lastPowerSource ?? "unknown", privacy: .public) to \(source ?? "unknown", privacy: .public)")
         lastPowerSource = source
         return true
     }
@@ -83,7 +83,7 @@ public final class DockTracker {
 
     private func update(to snapshot: DockSnapshot) {
         if snapshot.isDocked != settled.isDocked {
-            logger.info("Displays settled, now \(snapshot.summary, privacy: .public)")
+            logger.notice("Displays settled, now \(snapshot.summary, privacy: .public)")
         }
         settled = snapshot
     }
