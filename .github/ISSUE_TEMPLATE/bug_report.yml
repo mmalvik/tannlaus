@@ -12,7 +12,7 @@ body:
     attributes:
       label: Tannlaus version
       description: In Finder, select Tannlaus in Applications and choose File > Get Info, or run `defaults read /Applications/Tannlaus.app/Contents/Info CFBundleShortVersionString`. If you built it yourself, add the commit (`git rev-parse --short HEAD`).
-      placeholder: "1.1.0"
+      placeholder: "1.1.1"
     validations:
       required: true
 
@@ -142,16 +142,16 @@ body:
     attributes:
       label: Logs (if possible)
       description: |
-        Logs are the most useful part of a report. macOS keeps most Tannlaus log lines only in memory, so the best log comes from running this in Terminal, reproducing the problem, then pasting the output:
+        Logs are the most useful part of a report. Run this in Terminal and paste the output, changing `1h` to cover when it happened:
+
+        ```
+        log show --predicate 'subsystem == "com.tannlaus.app"' --last 1h --style compact
+        ```
+
+        Tannlaus 1.1.0 and older kept most of these lines only in memory. On an older version, update first, or run this while you reproduce the problem and paste what it prints:
 
         ```
         log stream --predicate 'subsystem == "com.tannlaus.app"' --level info --style compact
-        ```
-
-        If you can't reproduce it, paste what macOS kept instead (raise `1h` to cover when it happened):
-
-        ```
-        log show --predicate 'subsystem == "com.tannlaus.app"' --last 1h --info --style compact
         ```
 
         If Terminal says "Operation not permitted", give it Full Disk Access in System Settings > Privacy & Security. Look the output over before posting and remove anything you'd rather not share.
